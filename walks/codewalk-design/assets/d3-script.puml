@@ -1,0 +1,26 @@
+@startuml
+title The walk script
+skinparam shadowing false
+skinparam defaultFontSize 13
+rectangle "Walk\nid, title, version, parent,\nproject root, creation task" as walk
+rectangle "Chapter\nid, title" as chapter
+rectangle "Topic\nid, title" as topic
+rectangle "Phrase\nid, text (spoken)" as phrase
+rectangle "Code pointer\nfile, start, end, anchor" as pointer
+rectangle "Schema reference\ndiagram, named components,\nhighlighted texts" as schemaref
+rectangle "Action\nrun, debug, log; planned,\nneeds approval, done" as action
+rectangle "pauseAfter\nwait for the listener" as pauseafter
+rectangle "Diagrams\nPlantUML source + SVG" as diagrams
+rectangle "validate\nanchor found in its lines;\nnames exist in the SVG" as validate
+walk --> chapter : 1..n
+chapter --> topic : 1..n
+topic --> phrase : 1..n
+phrase --> pointer : 0..1
+phrase --> schemaref : 0..1
+phrase --> action : 0..1
+phrase --> pauseafter : 0..1
+walk --> diagrams
+schemaref --> diagrams
+validate ..> pointer
+validate ..> schemaref
+@enduml

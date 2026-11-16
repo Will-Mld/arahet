@@ -1,0 +1,44 @@
+@startuml d3-write-path
+title D3 - Normal WAL-enabled write path; fixed and variable records
+participant "Client\n(pymarketstore)" as C
+participant "frontend.DataService\nWrite (write.go:36)" as F
+participant "executor.Writer\nWriteCSM (writer.go:262)" as W
+participant "catalog.Directory" as CAT
+participant "WALFileType\n(wal.go)" as WAL
+participant "SyncWAL goroutine\n(wal.go:714)" as S
+database "WAL file" as WF
+database "year .bin files" as P
+participant "TriggerPluginDispatcher\n(written.go)" as T
+participant "ReplicationSender" as R
+C -> F : /rpc Write(MultiWriteRequest, msgpack)
+F -> W : WriteCSM(ColumnSeriesMap, isVariableLength)
+W -> CAT : GetLatestTimeBucketInfoFromKey\n(or AddTimeBucket: create dirs + file)
+W -> W : check data shapes, coerce types,\nColumnSeries -> RowSeries
+W -> W : WriteRecords: TimeToIndex, IndexToOffset
+W -> WAL : WriteCommand + QueueWriteCommand (channel)
+W -> WAL : RequestFlush(): wait unless flush already queued
+note over W,S
+  Common background-writer route shown below.
+  Already queued flush: return immediately.
+  No background writer: FlushToWAL in caller.
+  Flush errors are logged, not returned by RequestFlush.
+end note
+WAL -> S : flushChannel
+S -> WAL : FlushToWAL()
+WAL -> WF : TI(WAL, PREPARING)
+WAL -> WF : MID TGDATA + TG length + TG + MD5
+WAL -> WF : TI(WAL, COMMITCOMPLETE) + fsync
+WAL -> R : Send(TG) to replicas
+alt fixed records
+  WAL -> P : writePrimary: WriteAt(offset, index+payload)\n(overwrite slot; page cache, no fsync here)
+else variable records
+  WAL -> P : read old payload, merge + timestamp sort,\noptional Snappy, write tail + 24-byte indirect slot
+end
+WAL -> T : AppendRecord + DispatchRecords\nasync; even after logged primary-write errors
+S --> W : requested flush done (waiting route)
+W --> F : nil (flush errors not propagated)
+F --> C : MultiServerResponse\nnot an unconditional durability guarantee
+== every 5 min (primary refresh attempt) ==
+S -> WAL : CreateCheckpoint if pending: TI(CHECKPOINT, PREPARING),\nsyncfs, TI(CHECKPOINT, COMMITCOMPLETE)
+S -> WF : every wal_rotate_interval timer events: truncate WAL\n(default 5, roughly 25 min; includes empty/failed attempts)
+@enduml

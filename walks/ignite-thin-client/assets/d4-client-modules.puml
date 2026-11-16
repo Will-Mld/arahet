@@ -1,0 +1,27 @@
+@startuml d4-client-modules
+title Thin client, client side (drawn from the 2.17.0 code)
+skinparam componentStyle rectangle
+component "Ignition.startClient" as start
+component "TcpIgniteClient\nfacade: caches, SQL, transactions,\ncompute, services" as tic
+component "TcpClientCache\nhandle per cache name" as tcc
+component "ClientBinaryMarshaller\nIgnite binary format" as marsh
+component "ReliableChannel\nholders, default channel,\nretries, partition awareness" as rc
+component "ClientRetryPolicy\n(default ClientRetryAllPolicy)" as retry
+component "ClientCacheAffinityContext\npartition to node map" as aff
+component "ClientDiscoveryContext\nserver endpoints" as disc
+component "ClientChannelHolder\none endpoint list,\nreconnect throttling" as hold
+component "TcpClientChannel\none TCP connection: handshake,\nrequest ids, pending futures" as tch
+component "GridNioClientConnectionMultiplexer\nGridNioServer in client mode,\none selector" as mux
+component "GridNioClientParser\n4-byte length framing" as parser
+start --> tic
+tic --> tcc
+tcc --> marsh
+tcc --> rc
+rc --> retry
+rc --> aff
+rc --> disc
+rc --> hold : 1..n
+hold --> tch : 0..1
+tch --> mux
+mux --> parser
+@enduml

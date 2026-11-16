@@ -1,0 +1,29 @@
+@startuml d4-read-path
+title D4 - Query path: request -> planner -> scanner -> ColumnSeries -> response
+participant "Client" as C
+participant "frontend.DataService\nQuery / executeQuery\n(query.go:91,143)" as F
+participant "QueryService.ExecuteQuery\n(query.go:304)" as Q
+participant "planner.Query.Parse\n(planner.go:203)" as PL
+participant "catalog.Directory" as CAT
+participant "executor.Reader\n(scanner.go:148,181)" as R
+database "year .bin files" as P
+participant "sqlparser.AggRunner\n(registry.go:51)" as AG
+C -> F : /rpc Query(destination "AAPL,TSLA/1Min/OHLCV",\nepoch_start/end, limit, columns, functions)
+F -> F : TimeBucketKey; "*" -> all symbols
+F -> Q : ExecuteQuery(tbk, start, end, limit, columns)
+Q -> Q : storage timeframe, expanded row limit (FIRST/LAST)\n3Min selects 1Min; no implicit aggregation
+Q -> PL : Parse()
+PL -> CAT : walk directory tree with restrictions
+PL --> Q : ParseResult: qualified year files, intervals/day
+Q -> R : NewReader(ParseResult): IO plan per key
+Q -> R : Read()
+R -> P : fixed slots: forward from lower bound / backward from right edge\nin 8192-record chunks; skip holes (index 0)
+opt variable records
+  R -> P : second-stage read: indirect offset + length,\noptional Snappy decode, reconstruct timestamps
+end
+R --> Q : ColumnSeriesMap
+Q -> Q : FilterColumns(columns)
+Q --> F : ColumnSeriesMap
+F -> AG : optional functions pipeline (materialized)\nexplicit candlecandler for aggregation
+F --> C : NumpyMultiDataset (columnar, msgpack)
+@enduml

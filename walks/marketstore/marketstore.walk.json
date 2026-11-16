@@ -1,0 +1,3289 @@
+{
+ "schema": "codewalk-script-v1",
+ "schemaExtensions": {
+  "diagram": "phrase field: id of a diagram in 'diagrams' (PlantUML source + rendered SVG); diagramFocus lists texts to highlight, diagramComponents the named parts to frame",
+  "action": "phrase field: something to run, debug or capture at this point; status 'planned' or 'needs-approval'. The player does not run actions."
+ },
+ "id": "marketstore-v4.1.23",
+ "title": "Alpaca MarketStore v4.1.23: code walk with its schemas",
+ "project": {
+  "name": "marketstore-v4.1.23",
+  "root": "../../demo/marketstore-v4.1.23",
+  "version": "v4.1.23",
+  "commit": "007586568aa92a1c83189b3c06843dc27a23e5b3",
+  "committed": "2022-11-07",
+  "obtain": "python3 bootstrap.py demo: a git checkout of exactly this commit (the original github.com/alpacahq/marketstore is gone; public copies of it serve the commit), or the Go module github.com/alpacahq/marketstore/v4 v4.1.23 from the Go module mirror; both checked against the Go checksum database",
+  "licence": "Apache-2.0"
+ },
+ "operator": {
+  "task": "Walk an engineer through MarketStore: what it is for, how to build and configure it, its design ideas, each module, and the main workflows, with code, schemas, debug points and logs.",
+  "guidance": "User's top-level plan (2026-11-12): 1 overview from the business point of view; 2 preparations: build, versions, top-level structure, run build, show configurations; 3 main design ideas, requirements and assumptions, supported with code and schemas; 4 modules, each with main features and schemas; 5 top-level workflows and scenarios with schemas, call hierarchy, debug where applicable, logs; 6 other notes and open questions.",
+  "audience": "an engineer new to the codebase"
+ },
+ "author": "Claude Code (claude-opus-5-5), written by reading the source and docs/design on 2026-11-12; the narrated schemas added 2026-11-14",
+ "diagrams": {
+  "d1-context": {
+   "title": "MarketStore in its environment",
+   "source": "assets/d1-context.puml",
+   "svg": "assets/svg/d1-context.svg"
+  },
+  "d2-on-disk": {
+   "title": "On-disk layout and year file format",
+   "source": "assets/d2-on-disk.puml",
+   "svg": "assets/svg/d2-on-disk.svg"
+  },
+  "d3-write-path": {
+   "title": "Write path",
+   "source": "assets/d3-write-path.puml",
+   "svg": "assets/svg/d3-write-path.svg"
+  },
+  "d4-read-path": {
+   "title": "Query path",
+   "source": "assets/d4-read-path.puml",
+   "svg": "assets/svg/d4-read-path.svg"
+  },
+  "d5-wal-states": {
+   "title": "WAL file and transaction group states",
+   "source": "assets/d5-wal-states.puml",
+   "svg": "assets/svg/d5-wal-states.svg"
+  },
+  "d6-startup": {
+   "title": "Server start-up",
+   "source": "assets/d6-startup.puml",
+   "svg": "assets/svg/d6-startup.svg"
+  },
+  "d7-modules": {
+   "title": "Packages and dependencies",
+   "source": "assets/d7-modules.puml",
+   "svg": "assets/svg/d7-modules.svg"
+  },
+  "d8-replication": {
+   "title": "Replication",
+   "source": "assets/d8-replication.puml",
+   "svg": "assets/svg/d8-replication.svg"
+  },
+  "d9-plugins": {
+   "title": "Plugins: triggers and background workers",
+   "source": "assets/d9-plugins.puml",
+   "svg": "assets/svg/d9-plugins.svg"
+  }
+ },
+ "defaults": {
+  "gapMs": 700
+ },
+ "chapters": [
+  {
+   "id": "c1",
+   "title": "Overview: what it does for the business",
+   "items": [
+    {
+     "id": "c1.i1",
+     "title": "What it is",
+     "phrases": [
+      {
+       "id": "c1.p1",
+       "diagram": "d1-context",
+       "diagramFocus": [
+        "MarketStore server process"
+       ],
+       "text": "MarketStore is Alpaca's open-source database server for financial time series: price bars and ticks over many years, for all US equities and for crypto.",
+       "code": {
+        "file": "README.md",
+        "start": 8,
+        "end": 12,
+        "anchor": "database server optimized for financial time-series data"
+       },
+       "diagramComponents": [
+        "MarketStore server process"
+       ]
+      },
+      {
+       "id": "c1.p2",
+       "text": "Its authors call it an extensible DataFrame service you can reach over the network. You send a symbol, a timeframe and a time range, and you get columns back, ready for pandas.",
+       "code": {
+        "file": "README.md",
+        "start": 10,
+        "end": 10,
+        "anchor": "extensible DataFrame service"
+       }
+      },
+      {
+       "id": "c1.p3",
+       "text": "It is built for algorithmic-trading backtests, charting and price-history analysis, and it presents itself as a replacement for piles of HDF5 files. HDF5 stands for Hierarchical Data Format, version five.",
+       "code": {
+        "file": "README.md",
+        "start": 12,
+        "end": 12,
+        "anchor": "algorithmic trading backtesting"
+       }
+      },
+      {
+       "id": "c1.p4",
+       "text": "The value claim: queries over the network as fast as local HDF5 files, and appends two orders of magnitude faster than a DataFrame, because the storage format is built for this one shape of data.",
+       "code": {
+        "file": "README.md",
+        "start": 16,
+        "end": 16,
+        "anchor": "two orders of magnitude faster"
+       }
+      },
+      {
+       "id": "c1.p4a",
+       "text": "This walk takes about 37 minutes to listen to, plus the time you spend at its stops for builds, debugging and logs."
+      }
+     ]
+    },
+    {
+     "id": "c1.d1",
+     "title": "Schema: MarketStore in its environment",
+     "phrases": [
+      {
+       "id": "t1.p1",
+       "diagram": "d1-context",
+       "diagramComponents": [
+        "MarketStore server process"
+       ],
+       "text": "This schema shows MarketStore in its environment: who talks to it, and where the data lives."
+      },
+      {
+       "id": "t1.p2",
+       "diagram": "d1-context",
+       "diagramComponents": [
+        "user",
+        "py",
+        "cli",
+        "gc",
+        "ws"
+       ],
+       "text": "The client group contains the Python client, pymarketstore, a command-line shell, gRPC clients, and WebSocket subscribers. gRPC is a remote procedure call framework."
+      },
+      {
+       "id": "t1.p3",
+       "diagram": "d1-context",
+       "diagramComponents": [
+        "rpc",
+        "grpc",
+        "wsh",
+        "met"
+       ],
+       "text": "The server listens on JSON-RPC at port 5993 and on gRPC at port 5995, and it offers a stream endpoint for WebSockets and Prometheus metrics. JSON-RPC is another remote procedure call protocol, served here over HTTP."
+      },
+      {
+       "id": "t1.p4",
+       "diagram": "d1-context",
+       "diagramComponents": [
+        "eng",
+        "disk"
+       ],
+       "diagramFocus": [
+        "symbol/timeframe/attribute/year.bin",
+        "+ WAL file"
+       ],
+       "text": "Inside, one engine handles both queries and writes. Everything is stored under one data directory: a file per symbol, timeframe, attribute group and year, plus the write-ahead log."
+      },
+      {
+       "id": "t1.p5",
+       "diagram": "d1-context",
+       "diagramComponents": [
+        "vendor",
+        "bg",
+        "trg"
+       ],
+       "text": "Vendor data arrives through background-worker plugins. Configured triggers react asynchronously to normal writes; crash-WAL replay does not rerun them."
+      },
+      {
+       "id": "t1.p6",
+       "diagram": "d1-context",
+       "diagramComponents": [
+        "rep"
+       ],
+       "diagramFocus": [
+        "WAL transaction groups"
+       ],
+       "text": "Replicas receive live WAL transaction groups over gRPC, normally port 5996. Their client-write restrictions have gaps in this release."
+      }
+     ]
+    },
+    {
+     "id": "c1.i2",
+     "title": "Who uses it and how",
+     "phrases": [
+      {
+       "id": "c1.p5",
+       "text": "A typical user is a researcher in Python. With the pymarketstore client, one call asks for the last ten one-minute bars of Bitcoin and returns a DataFrame.",
+       "code": {
+        "file": "README.md",
+        "start": 186,
+        "end": 196,
+        "anchor": "pymkts.Params('BTC', '1Min', 'OHLCV', limit=10)"
+       }
+      },
+      {
+       "id": "c1.p6",
+       "text": "Writing is just as direct: a numpy record array with an Epoch column, sent to a key such as TEST, one minute, Tick.",
+       "code": {
+        "file": "README.md",
+        "start": 213,
+        "end": 218,
+        "anchor": "cli.write(data, 'TEST/1Min/Tick')"
+       }
+      },
+      {
+       "id": "c1.p7",
+       "text": "In production, data arrives from vendors through feeder plugins that run inside the server, for example the Alpaca broker feeder, Polygon or IEX.",
+       "code": {
+        "file": "contrib/alpacabkfeeder/alpacav2.go",
+        "start": 24,
+        "end": 30,
+        "anchor": "func NewBgWorker"
+       }
+      }
+     ]
+    },
+    {
+     "id": "c1.i3",
+     "title": "Original business requirements and scope",
+     "phrases": [
+      {
+       "id": "c1.p8",
+       "text": "The 2016 design note sets the target: candles from one minute to one day for ten to forty thousand US stocks, with audit, protection against corruption, and support for split adjustments.",
+       "code": {
+        "file": "docs/design/file_format_design.txt",
+        "start": 10,
+        "end": 24,
+        "anchor": "between 10-40,000 stocks"
+       }
+      },
+      {
+       "id": "c1.p9",
+       "diagram": "d1-context",
+       "diagramFocus": [
+        "Replica instance(s)"
+       ],
+       "text": "SQL support is partial; the query interface also accepts structured requests.",
+       "code": {
+        "file": "frontend/query.go",
+        "start": 21,
+        "end": 24,
+        "anchor": "SQL is not fully supported"
+       },
+       "diagramComponents": [
+        "rep"
+       ]
+      },
+      {
+       "id": "c1.p9a",
+       "text": "Replication targets a single writer, but the replica write guard covers only some write paths; the modules chapter shows the gaps."
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "c2",
+   "title": "Preparations: versions, build, configuration, structure",
+   "items": [
+    {
+     "id": "c2.i1",
+     "title": "Versions and toolchain",
+     "phrases": [
+      {
+       "id": "c2.p1",
+       "text": "This is a Go project, so there is no Maven or Gradle. The build configuration is go dot mod: module path alpacahq marketstore v4, language version Go 1.18.",
+       "code": {
+        "file": "go.mod",
+        "start": 1,
+        "end": 3,
+        "anchor": "module github.com/alpacahq/marketstore/v4"
+       }
+      },
+      {
+       "id": "c2.p2",
+       "text": "Dependencies include ANTLR, short for Another Tool for Language Recognition, whose runtime the SQL parser uses, plus exchange clients, Cobra, gRPC and protobuf. Their versions are declared in go dot mod.",
+       "code": {
+        "file": "go.mod",
+        "start": 5,
+        "end": 51,
+        "anchor": "google.golang.org/grpc"
+       }
+      },
+      {
+       "id": "c2.p3",
+       "text": "The Docker build compiles with Go 1.18.1.",
+       "code": {
+        "file": "Dockerfile",
+        "start": 6,
+        "end": 6,
+        "anchor": "FROM golang:1.18.1-buster as builder"
+       }
+      },
+      {
+       "id": "c2.p4",
+       "text": "CircleCI is configured for Go 1.18.2. This does not identify which toolchain produced a release binary.",
+       "code": {
+        "file": ".circleci/config.yml",
+        "start": 5,
+        "end": 7,
+        "anchor": "cimg/go:1.18.2"
+       },
+       "action": {
+        "kind": "run",
+        "where": "WSL",
+        "do": "go version; go env GOPATH GOMODCACHE",
+        "status": "planned"
+       },
+       "pauseAfter": true
+      }
+     ]
+    },
+    {
+     "id": "c2.i2",
+     "title": "Build",
+     "phrases": [
+      {
+       "id": "c2.p5",
+       "text": "The Makefile is the build entry point. make build runs go build and stamps the version tag, build time and git hash into the binary through linker flags.",
+       "code": {
+        "file": "Makefile",
+        "start": 7,
+        "end": 8,
+        "anchor": "-X $(UTIL_PATH).GitHash"
+       }
+      },
+      {
+       "id": "c2.p6",
+       "text": "The version tag, build timestamp and Git hash are variables in package utils.",
+       "code": {
+        "file": "utils/versiontags.go",
+        "start": 5,
+        "end": 9,
+        "anchor": "BuildStamp string"
+       }
+      },
+      {
+       "id": "c2.p6a",
+       "text": "The version flag prints those three values.",
+       "code": {
+        "file": "cmd/main.go",
+        "start": 24,
+        "end": 29,
+        "anchor": "if flagPrintVersion"
+       }
+      },
+      {
+       "id": "c2.p7",
+       "text": "make plugins builds selected extension targets, mostly shared plugins, plus the standalone ice executable.",
+       "code": {
+        "file": "Makefile",
+        "start": 35,
+        "end": 46,
+        "anchor": "contrib/ice"
+       }
+      },
+      {
+       "id": "c2.p7a",
+       "text": "The ice target builds an ordinary executable, rather than a shared plugin.",
+       "code": {
+        "file": "contrib/ice/Makefile",
+        "start": 1,
+        "end": 3,
+        "anchor": "-o $(GOPATH0)/bin/ice"
+       }
+      },
+      {
+       "id": "c2.p8",
+       "text": "The Dockerfile has two stages: compile in a Go image, then copy the binary and plugins into a small Debian image, generate a default config with marketstore init, and expose port 5993.",
+       "code": {
+        "file": "Dockerfile",
+        "start": 21,
+        "end": 41,
+        "anchor": "RUN [\"marketstore\", \"init\"]"
+       }
+      },
+      {
+       "id": "c2.p9",
+       "text": "Building remains a manual, planned action. Use make build with an explicit Docker tag input for version stamps, then build plugins and run vet.",
+       "action": {
+        "kind": "run",
+        "where": "WSL (scratch copy)",
+        "do": "In an approved scratch checkout with Go dependencies available:\nexport GOPATH=\"$(go env GOPATH)\" DOCKER_TAG=v4.1.23\nmkdir -p \"${GOPATH%%:*}/bin\"\nmake build\nmake plugins\ngo vet ./executor/... ./catalog/... ./planner/...\nmake build obtains the Git hash from this checkout. Check GOPATH and compatible server/plugin toolchain and shared dependencies before running.\nA real Git hash requires checkout metadata; a bundled source snapshot may not contain it.",
+        "status": "needs-approval",
+        "why": "manual build; may download dependencies if the local cache is incomplete"
+       },
+       "pauseAfter": true
+      }
+     ]
+    },
+    {
+     "id": "c2.i3",
+     "title": "Run configuration",
+     "phrases": [
+      {
+       "id": "c2.p10",
+       "text": "The server reads one YAML file, mkts dot yml. marketstore init writes this default: data directory, JSON-RPC port 5993, gRPC port 5995, log level, and the WAL rotate interval; the listen host stays commented out.",
+       "code": {
+        "file": "cmd/create/default.yml",
+        "start": 4,
+        "end": 10,
+        "anchor": "listen_port: 5993"
+       }
+      },
+      {
+       "id": "c2.p11",
+       "text": "The generated YAML contains commented trigger and worker examples; it enables no plugins until those sections are configured.",
+       "code": {
+        "file": "cmd/create/default.yml",
+        "start": 14,
+        "end": 57,
+        "anchor": "Un-comment to enable."
+       }
+      },
+      {
+       "id": "c2.p11a",
+       "text": "For this demonstration, explicitly enable aggregation and streaming in a scratch configuration. The action contains the complete small write/query fixture and its debug build; execution remains planned.",
+       "action": {
+        "kind": "run",
+        "where": "supported Linux environment, scratch checkout only",
+        "status": "needs-approval",
+        "why": "manual build and scratch server/data preparation; no commands run by the player",
+        "do": "Prerequisites: compatible Go server/plugin builds; Python with numpy and pymarketstore already available. This is a planned fixture, not a recorded successful run.\nBuild: export GOPATH=\"$(go env GOPATH)\" DOCKER_TAG=v4.1.23; mkdir -p \"${GOPATH%%:*}/bin\"; make build; make -C contrib/ondiskagg; make -C contrib/stream. The Makefiles put plugins in GOPATH/bin. Use the same Go toolchain and shared package inputs.\nCreate an empty scratch directory and its empty data subdirectory; save the following as mkts.yml there, replacing /absolute/scratch/data with its own empty data path:\nroot_directory: /absolute/scratch/data\nlisten_host: \"127.0.0.1\"\nlisten_port: 5993\ngrpc_listen_port: 5995\nlog_level: info\nstop_grace_period: 0\nwal_rotate_interval: 5\ntriggers:\n  - module: ondiskagg.so\n    on: \"*/1Min/OHLCV\"\n    config:\n      destinations: [\"5Min\"]\n  - module: stream.so\n    on: \"CWDEMO/*/OHLCV\"\n    config: {}\nFrom the scratch checkout run the binary just built: ./marketstore start --config /absolute/scratch/mkts.yml. Keep it on loopback. All client operations below use remote JSON-RPC, not local connect.\nIn Python:\nimport time, numpy as np, pymarketstore as pymkts\nclient = pymkts.Client()  # default remote endpoint http://localhost:5993/rpc\ndtype = [('Epoch','i8'),('Open','f8'),('High','f8'),('Low','f8'),('Close','f8'),('Volume','f8')]\nrows = np.array([(1609459200 + 60*i, 10.+i, 11.+i, 9.+i, 10.5+i, 100.) for i in range(5)], dtype=dtype)\nprint(client.write(rows, 'CWDEMO/1Min/OHLCV'))\nprint(client.query(pymkts.Params('CWDEMO','1Min','OHLCV',limit=5)).first().df())\nPoll the derived query until a row appears or a 10-second deadline expires; asynchronous trigger work must not be assumed complete when Write returns:\ndeadline = time.monotonic() + 10\nwhile True:\n    try:\n        frame = client.query(pymkts.Params('CWDEMO','5Min','OHLCV',limit=1)).first().df()\n        if not frame.empty:\n            print(frame); break\n    except Exception as error:\n        print('derived query not ready:', error)\n    if time.monotonic() >= deadline: raise RuntimeError('aggregation did not produce a row')\n    time.sleep(0.1)\nExpected one derived bar: Open 10, High 15, Low 9, Close 14.5, Volume 500. Compare every field and the base five rows; the fixture has not been executed.\nOptional stream observer: connect /ws before writing and send MessagePack {\"streams\":[\"CWDEMO/*/OHLCV\"]}. Expect latest-row publication, not five guaranteed row events; 5Min publication is delayed. No vendor workers or credentials are required.\nDebug variant, for the debugger stops c5.p1, c5.p10, c5.p17 and c5.p30: make build links with -s, which omits the symbol table and debug information, so source breakpoints need a separate build. As read from the Makefiles (not run), the top-level make debug would stop at contrib/ice, whose Makefile has no debug target, before it installs the server; so run its relevant parts instead, in the same shell with GOPATH exported:\nmake -C contrib/ondiskagg debug; make -C contrib/stream debug; go build -gcflags=\"all=-N -l\" -o marketstore-debug .\nThese are the compiler flags of the Makefile debug target, without -s. The debug plugins replace ondiskagg.so and stream.so in GOPATH/bin: run only marketstore-debug while they are there, and rerun make -C contrib/ondiskagg; make -C contrib/stream before using ./marketstore again.\nDelve (dlv) must be installed. Instead of ./marketstore start, start the debug server from the scratch checkout with the same mkts.yml: dlv exec ./marketstore-debug -- start --config /absolute/scratch/mkts.yml. For the IDE, start it headless instead: dlv --headless --listen=127.0.0.1:2345 --api-version=2 exec ./marketstore-debug -- start --config /absolute/scratch/mkts.yml, then attach a Go Remote run configuration to 127.0.0.1:2345. Then run the same Python steps."
+       },
+       "pauseAfter": true
+      },
+      {
+       "id": "c2.p12",
+       "text": "In code the file becomes MktsConfig: root directory, listen addresses, WAL settings, replication, triggers and background workers.",
+       "code": {
+        "file": "utils/config.go",
+        "start": 45,
+        "end": 64,
+        "anchor": "type MktsConfig struct"
+       }
+      }
+     ]
+    },
+    {
+     "id": "c2.i4",
+     "title": "Tests",
+     "phrases": [
+      {
+       "id": "c2.p13",
+       "text": "Testing is layered: unit tests with coverage, a CSV import test, JSON-RPC and gRPC integration tests, contrib tests, and a replication test.",
+       "code": {
+        "file": "Makefile",
+        "start": 51,
+        "end": 76,
+        "anchor": "unit-test:"
+       }
+      },
+      {
+       "id": "c2.p14",
+       "text": "CI runs separate jobs. CSV import depends on build; tagged deployment waits for build, unit tests, and three integration jobs, not replication or CSV import.",
+       "code": {
+        "file": ".circleci/config.yml",
+        "start": 74,
+        "end": 127,
+        "anchor": "- deploy:"
+       },
+       "action": {
+        "kind": "run",
+        "where": "WSL (scratch copy)",
+        "do": "go test ./executor/... ./catalog/... ./planner/... ./utils/io/...",
+        "status": "needs-approval",
+        "why": "same dependency download as the build"
+       },
+       "pauseAfter": true
+      }
+     ]
+    },
+    {
+     "id": "c2.d7",
+     "title": "Schema: packages and dependencies",
+     "phrases": [
+      {
+       "id": "t1.p7",
+       "diagram": "d7-modules",
+       "diagramComponents": [
+        "cmd",
+        "di"
+       ],
+       "text": "The package map shows how the code is organised. cmd is the entry point, and internal di wires the services together."
+      },
+      {
+       "id": "t1.p8",
+       "diagram": "d7-modules",
+       "diagramComponents": [
+        "fe",
+        "pl",
+        "ex"
+       ],
+       "text": "frontend serves the API. It asks planner which files to read, and executor to read or write them."
+      },
+      {
+       "id": "t1.p9",
+       "diagram": "d7-modules",
+       "diagramComponents": [
+        "cat",
+        "uio"
+       ],
+       "text": "catalog is the directory tree, and utils io holds the shared data model: keys, data shapes, column series and the time index."
+      },
+      {
+       "id": "t1.p10",
+       "diagram": "d7-modules",
+       "diagramComponents": [
+        "sql",
+        "plg",
+        "rep",
+        "contrib"
+       ],
+       "diagramFocus": [
+        "writes via WriteCSM"
+       ],
+       "text": "Around the core sit the SQL subset with its aggregates, plugin loading, replication, and the contrib plugins, which write through WriteCSM like any other client."
+      }
+     ]
+    },
+    {
+     "id": "c2.i5",
+     "title": "Top-level structure",
+     "phrases": [
+      {
+       "id": "c2.p15",
+       "text": "The program starts in marketstore dot go. main does one thing: it calls cmd dot Execute.",
+       "code": {
+        "file": "marketstore.go",
+        "start": 21,
+        "end": 27,
+        "anchor": "cmd.Execute()"
+       }
+      },
+      {
+       "id": "c2.p16",
+       "text": "cmd builds a cobra command tree with five subcommands: init, estimate, start, tool and connect.",
+       "code": {
+        "file": "cmd/main.go",
+        "start": 36,
+        "end": 42,
+        "anchor": "c.AddCommand(start.Cmd)"
+       }
+      },
+      {
+       "id": "c2.p17",
+       "diagram": "d7-modules",
+       "text": "Around that, the code falls into three parts: the server core, the extensions, and generated or vendor-specific code. This map shows the core packages and how they depend on each other.",
+       "diagramComponents": [
+        "fe",
+        "pl",
+        "ex",
+        "cat",
+        "uio"
+       ]
+      },
+      {
+       "id": "c2.p18",
+       "diagram": "d7-modules",
+       "diagramFocus": [
+        "executor (writer, WAL, replay, reader)",
+        "frontend (JSON-RPC, gRPC, stream API)",
+        "sqlparser + uda (SQL subset, aggregates)",
+        "contrib (feeders, ondiskagg, stream ...)"
+       ],
+       "text": "The core is comparatively small. The SQL parser and contrib directories dominate the source volume, largely because of generated parser code and vendor integrations.",
+       "diagramComponents": [
+        "ex",
+        "fe",
+        "cat",
+        "pl",
+        "sql",
+        "contrib"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "c3",
+   "title": "Main design ideas, requirements and assumptions",
+   "items": [
+    {
+     "id": "c3.i1",
+     "title": "Requirements",
+     "phrases": [
+      {
+       "id": "c3.p1",
+       "text": "The 2016 design starts with performance and scale for fixed-width numeric data across tens of thousands of instruments.",
+       "code": {
+        "file": "docs/design/file_format_design.txt",
+        "start": 16,
+        "end": 19,
+        "anchor": "Performance and scale"
+       }
+      },
+      {
+       "id": "c3.p2",
+       "text": "The second is data integrity: prices and times must be auditable and protected against corruption, and past data must be revisable for splits.",
+       "code": {
+        "file": "docs/design/file_format_design.txt",
+        "start": 21,
+        "end": 24,
+        "anchor": "Data integrity and management"
+       }
+      },
+      {
+       "id": "c3.p3",
+       "text": "The 2016 durable-writes note proposes valid, complete on-disk data and durable reported commits. These are design goals; implementation limits matter.",
+       "code": {
+        "file": "docs/design/durable_writes_design.txt",
+        "start": 10,
+        "end": 12,
+        "anchor": "The data present on disk is always valid and complete"
+       }
+      }
+     ]
+    },
+    {
+     "id": "c3.d2",
+     "title": "Schema: on-disk layout",
+     "phrases": [
+      {
+       "id": "t2.p1",
+       "diagram": "d2-on-disk",
+       "diagramComponents": [
+        "data",
+        "sym",
+        "tf",
+        "ag"
+       ],
+       "text": "On disk, everything sits under the root directory, as a tree of folders: symbol, then timeframe, then attribute group."
+      },
+      {
+       "id": "t2.p2",
+       "diagram": "d2-on-disk",
+       "diagramComponents": [
+        "f2017",
+        "f2018",
+        "wal"
+       ],
+       "text": "At the bottom of the tree there is one file per year, for example 2017 dot bin. The write-ahead log file lives at the top."
+      },
+      {
+       "id": "t2.p3",
+       "diagram": "d2-on-disk",
+       "diagramComponents": [
+        "hdr"
+       ],
+       "text": "Each year file starts with a fixed header of 37,024 bytes that describes its columns."
+      },
+      {
+       "id": "t2.p4",
+       "diagram": "d2-on-disk",
+       "diagramComponents": [
+        "r1",
+        "rn"
+       ],
+       "diagramFocus": [
+        "index int64"
+       ],
+       "text": "Fixed records occupy indexed slots. Variable records instead use 24-byte indirect slots pointing to payload data."
+      },
+      {
+       "id": "t2.p5",
+       "diagram": "d2-on-disk",
+       "diagramComponents": [
+        "holes"
+       ],
+       "text": "Intervals that were never written are holes in the file. Their index is zero, and the reader skips them."
+      },
+      {
+       "id": "t2.p6",
+       "diagram": "d2-on-disk",
+       "diagramFocus": [
+        "offset = header + (index - 1) * record length",
+        "(time - Jan 1 00:00) / timeframe"
+       ],
+       "text": "Time selects the initial slot directly. Range reads still scan buffered slots and skip holes; variable data needs a second-stage read."
+      }
+     ]
+    },
+    {
+     "id": "c3.i2",
+     "title": "Idea 1: one file per series and year, positions computed from time",
+     "phrases": [
+      {
+       "id": "c3.p4",
+       "diagram": "d2-on-disk",
+       "diagramFocus": [
+        "(time - Jan 1 00:00) / timeframe"
+       ],
+       "text": "The 2016 design defines resolution as intervals per day. Intraday slot positions derive from time, rather than a search index.",
+       "code": {
+        "file": "docs/design/file_format_design.txt",
+        "start": 39,
+        "end": 48,
+        "anchor": "Resolution is defined as number of time intervals stored per day"
+       },
+       "diagramComponents": [
+        "f2017",
+        "r1"
+       ]
+      },
+      {
+       "id": "c3.p5",
+       "diagram": "d2-on-disk",
+       "diagramFocus": [
+        "offset = header + (index - 1) * record length",
+        "(time - Jan 1 00:00) / timeframe"
+       ],
+       "text": "Intraday indexes count timeframes since January first, plus one. The daily branch instead uses day-of-year minus one; January first maps to zero, an important boundary concern.",
+       "code": {
+        "file": "utils/io/timeindex.go",
+        "start": 32,
+        "end": 44,
+        "anchor": "YearDay() - 1"
+       },
+       "diagramComponents": [
+        "hdr",
+        "r1",
+        "rn"
+       ]
+      },
+      {
+       "id": "c3.p5a",
+       "text": "IndexToOffset subtracts one before multiplying by record length and adding the header size. For a daily January first, index zero, that offset lands in the last bytes of the header.",
+       "code": {
+        "file": "utils/io/timeindex.go",
+        "start": 50,
+        "end": 56,
+        "anchor": "return (index-1)*int64(recordSize) + Headersize"
+       }
+      },
+      {
+       "id": "c3.p5b",
+       "text": "The reader skips every slot whose index is zero, so January first in a daily file is never returned. This is read from the code, not observed in a run.",
+       "code": {
+        "file": "executor/scanner.go",
+        "start": 454,
+        "end": 463,
+        "anchor": "if indexuint64 != 0 {"
+       }
+      },
+      {
+       "id": "c3.p6",
+       "text": "The 2016 fixed-record design stores an eight-byte index to distinguish written slots from holes.",
+       "code": {
+        "file": "docs/design/file_format_design.txt",
+        "start": 53,
+        "end": 66,
+        "anchor": "We store a 64-bit integer key"
+       }
+      },
+      {
+       "id": "c3.p7",
+       "text": "The version-two header stores year, timeframe duration in nanoseconds, record type, record length, and names and types for up to 1024 columns.",
+       "code": {
+        "file": "utils/io/metadata.go",
+        "start": 353,
+        "end": 369,
+        "anchor": "Timeframe    int64"
+       }
+      },
+      {
+       "id": "c3.p8",
+       "text": "This implementation uses format version two and a fixed header size of 37,024 bytes.",
+       "code": {
+        "file": "utils/io/metadata.go",
+        "start": 29,
+        "end": 34,
+        "anchor": "FileinfoVersion"
+       }
+      },
+      {
+       "id": "c3.p9",
+       "text": "Variable records keep index, offset and length in a 24-byte indirect slot. Their payload can hold multiple events per interval.",
+       "code": {
+        "file": "executor/writer.go",
+        "start": 156,
+        "end": 180,
+        "anchor": "indexOffsetLengthBytes = 24"
+       },
+       "diagram": "d2-on-disk",
+       "diagramComponents": [
+        "vr",
+        "vp"
+       ]
+      },
+      {
+       "id": "c3.p9a",
+       "text": "The client must set isvariablelength to true. Epoch holds whole seconds; a separate Nanoseconds column supplies subsecond precision.",
+       "code": {
+        "file": "README.md",
+        "start": 236,
+        "end": 277,
+        "anchor": "isvariablelength=True"
+       }
+      }
+     ]
+    },
+    {
+     "id": "c3.i3",
+     "title": "Idea 2: let the file system do the hard work",
+     "phrases": [
+      {
+       "id": "c3.p10",
+       "text": "New year files are sparsely extended with Truncate. Filesystem blocks, rather than individual empty intervals, determine physical allocation.",
+       "code": {
+        "file": "catalog/catalog.go",
+        "start": 757,
+        "end": 767,
+        "anchor": "fp.Truncate(fileSize)"
+       }
+      },
+      {
+       "id": "c3.p10a",
+       "text": "Fixed writes overwrite an indexed slot without extending the logical file. Bucket creation and variable payload writes have different metadata and allocation behavior.",
+       "code": {
+        "file": "executor/writer.go",
+        "start": 149,
+        "end": 168,
+        "anchor": "fp.WriteAt(data, offset)"
+       }
+      },
+      {
+       "id": "c3.p11",
+       "text": "The reader relies on this: an index of zero means a hole, and the record is skipped.",
+       "code": {
+        "file": "executor/scanner.go",
+        "start": 454,
+        "end": 463,
+        "anchor": "if indexuint64 != 0"
+       }
+      },
+      {
+       "id": "c3.p12",
+       "diagram": "d2-on-disk",
+       "diagramFocus": [
+        "category_name: Symbol",
+        "category_name: Timeframe",
+        "category_name: AttributeGroup",
+        "category_name: Year"
+       ],
+       "text": "The catalog is just the directory tree. Each level has a small category name file, so the tree describes itself: Symbol, Timeframe, AttributeGroup, Year.",
+       "code": {
+        "file": "catalog/catalog.go",
+        "start": 163,
+        "end": 186,
+        "anchor": "writeCategoryNameFile(\"Year\", dirname)"
+       },
+       "diagramComponents": [
+        "sym",
+        "tf",
+        "ag",
+        "f2017"
+       ]
+      },
+      {
+       "id": "c3.p13",
+       "text": "One difference from the 2016 design: the design puts the year second, but the code puts it last, so a path reads symbol, timeframe, attribute group, then year dot bin.",
+       "code": {
+        "file": "utils/io/keytypes.go",
+        "start": 47,
+        "end": 54,
+        "anchor": "AMZN/1Min/TICK/2017.bin"
+       }
+      }
+     ]
+    },
+    {
+     "id": "c3.d5",
+     "title": "Schema: WAL states",
+     "phrases": [
+      {
+       "id": "t2.p16",
+       "diagram": "d5-wal-states",
+       "diagramComponents": [
+        "WS"
+       ],
+       "text": "This diagram separates WAL file status from transaction-group processing."
+      },
+      {
+       "id": "t2.p17",
+       "diagram": "d5-wal-states",
+       "diagramComponents": [
+        "s11"
+       ],
+       "diagramFocus": [
+        "shutdown with background sync:"
+       ],
+       "text": "A new WAL is open and not replayed. With background sync on, the default, shutdown flushes and checkpoints without changing that header state."
+      },
+      {
+       "id": "t2.p18",
+       "diagram": "d5-wal-states",
+       "diagramComponents": [
+        "s13",
+        "s12",
+        "s22"
+       ],
+       "diagramFocus": [
+        "initialization finds old file"
+       ],
+       "text": "Recovery happens during initialization, after catalog and trigger setup, before serving requests. Replay finishes open and replayed; deletion then closes and removes the old file."
+      },
+      {
+       "id": "t2.p19",
+       "diagram": "d5-wal-states",
+       "diagramComponents": [
+        "TG",
+        "p",
+        "d",
+        "c",
+        "pr"
+       ],
+       "text": "The normal transaction-group state machine follows one group: prepared, written with its checksum, committed, and then written to the year files."
+      },
+      {
+       "id": "t2.p20",
+       "diagram": "d5-wal-states",
+       "diagramComponents": [
+        "ck"
+       ],
+       "diagramFocus": [
+        "Replay removes data covered by completed checkpoints, then"
+       ],
+       "text": "Checkpoint attempts run every five minutes. Recovery replays remaining transaction data after completed-checkpoint coverage is removed; WAL commit states are not used as a replay filter."
+      }
+     ]
+    },
+    {
+     "id": "c3.i4",
+     "title": "Idea 3: a write-ahead log with transaction groups",
+     "phrases": [
+      {
+       "id": "c3.p14",
+       "diagram": "d5-wal-states",
+       "diagramFocus": [
+        "TI WAL PREPARING",
+        "TG data + MD5",
+        "TI WAL COMMITCOMPLETE"
+       ],
+       "text": "The 2016 design groups writes in a WAL with transaction IDs, data, an MD5 checksum, and prepare/commit markers.",
+       "code": {
+        "file": "docs/design/durable_writes_design.txt",
+        "start": 51,
+        "end": 77,
+        "anchor": "Transaction Group (TG)"
+       },
+       "diagramComponents": [
+        "TG",
+        "p",
+        "d",
+        "c"
+       ]
+      },
+      {
+       "id": "c3.p14a",
+       "text": "FlushToWAL counts the queued write commands; for a nonempty batch it writes the prepare marker first, unless the WAL is bypassed, and then takes those commands off the queue.",
+       "code": {
+        "file": "executor/wal.go",
+        "start": 234,
+        "end": 260,
+        "anchor": "WAL Transaction Preparing Message"
+       }
+      },
+      {
+       "id": "c3.p14b",
+       "text": "FlushCommandsToWAL then serializes those commands into one transaction group.",
+       "code": {
+        "file": "executor/wal.go",
+        "start": 263,
+        "end": 278,
+        "anchor": "serializeTG(wf.txnPipe.tgID, writeCommands)"
+       }
+      },
+      {
+       "id": "c3.p15",
+       "diagram": "d3-write-path",
+       "diagramFocus": [
+        "TI(WAL, PREPARING)",
+        "MID TGDATA + TG length + TG + MD5",
+        "TI(WAL, COMMITCOMPLETE) + fsync"
+       ],
+       "text": "The normal WAL flush writes the serialized group and checksum, then a commit marker and WAL fsync.",
+       "code": {
+        "file": "executor/wal.go",
+        "start": 280,
+        "end": 315,
+        "anchor": "hash := md5.New()"
+       },
+       "diagramComponents": [
+        "S",
+        "WF"
+       ]
+      },
+      {
+       "id": "c3.p16",
+       "diagram": "d3-write-path",
+       "diagramFocus": [
+        "writePrimary: WriteAt(offset, index+payload)",
+        "Send(TG) to replicas"
+       ],
+       "text": "After the WAL fsync, replication is enqueued and primary-file writes begin. Individual primary errors are logged.",
+       "code": {
+        "file": "executor/wal.go",
+        "start": 317,
+        "end": 338,
+        "anchor": "wf.writePrimary(keyPath, writes, recordType, varRecLen)"
+       },
+       "diagramComponents": [
+        "P",
+        "R"
+       ]
+      },
+      {
+       "id": "c3.p17",
+       "diagram": "d5-wal-states",
+       "diagramFocus": [
+        "{1,2} OPEN, REPLAYED",
+        "replay done (not dry-run)"
+       ],
+       "text": "Successful non-dry-run replay writes OPEN, REPLAYED, rather than CLOSED, REPLAYED.",
+       "code": {
+        "file": "executor/walreplay.go",
+        "start": 149,
+        "end": 163,
+        "anchor": "wf.WriteStatus(wal.OPEN, wal.REPLAYED)"
+       },
+       "diagramComponents": [
+        "s13",
+        "s12"
+       ]
+      },
+      {
+       "id": "c3.p17a",
+       "text": "Deletion subsequently closes and removes the replayed file.",
+       "code": {
+        "file": "executor/wal.go",
+        "start": 170,
+        "end": 185,
+        "anchor": "wf.close(wal.REPLAYED)"
+       }
+      },
+      {
+       "id": "c3.p18",
+       "text": "Normal writes synchronize primary files only at checkpoints, not after each group. CreateCheckpoint does nothing when no new committed group is pending.",
+       "code": {
+        "file": "executor/wal.go",
+        "start": 463,
+        "end": 487,
+        "anchor": "io.Syncfs()"
+       }
+      },
+      {
+       "id": "c3.p18a",
+       "text": "Recovery replay at start-up is the exception: after each nonempty replayed group, it marks that group as the last committed one and creates a checkpoint before it moves on.",
+       "code": {
+        "file": "executor/walreplay.go",
+        "start": 169,
+        "end": 213,
+        "anchor": "err = wf.CreateCheckpoint()"
+       }
+      }
+     ]
+    },
+    {
+     "id": "c3.i5",
+     "title": "Idea 4: read committed, materialise, extend by plugins",
+     "phrases": [
+      {
+       "id": "c3.p19",
+       "text": "The 2016 design proposes read-committed visibility, but leaves reader access to committed WAL data outside its scope.",
+       "code": {
+        "file": "docs/design/durable_writes_design.txt",
+        "start": 186,
+        "end": 196,
+        "anchor": "beyond the scope"
+       }
+      },
+      {
+       "id": "c3.p19a",
+       "text": "Primary writes happen file by file after the WAL fsync, so a WAL commit alone does not make the entire group atomically visible.",
+       "code": {
+        "file": "executor/wal.go",
+        "start": 313,
+        "end": 338,
+        "anchor": "wf.writePrimary"
+       }
+      },
+      {
+       "id": "c3.p19b",
+       "text": "Queries read primary files directly, without a transaction snapshot or committed-WAL overlay.",
+       "code": {
+        "file": "executor/scanner.go",
+        "start": 434,
+        "end": 463,
+        "anchor": "Read"
+       }
+      },
+      {
+       "id": "c3.p20",
+       "text": "The 2016 executor design says materialise, don't pipeline: read once, then apply aggregates.",
+       "code": {
+        "file": "docs/design/executor_design.txt",
+        "start": 24,
+        "end": 34,
+        "anchor": "Materialize, don't pipeline"
+       }
+      },
+      {
+       "id": "c3.p21",
+       "diagram": "d9-plugins",
+       "diagramFocus": [
+        "plugins.Load(name)",
+        "Trigger plugin",
+        "BgWorker plugin"
+       ],
+       "text": "Extensibility comes from Go plugins, loaded by file name at start-up. Triggers react to writes, and background workers feed data in.",
+       "code": {
+        "file": "plugins/load.go",
+        "start": 44,
+        "end": 60,
+        "anchor": "plugin.Open(pluginPath)"
+       },
+       "diagramComponents": [
+        "load",
+        "trig",
+        "bg"
+       ]
+      }
+     ]
+    },
+    {
+     "id": "c3.i6",
+     "title": "Assumptions",
+     "phrases": [
+      {
+       "id": "c3.p22",
+       "text": "Use one owning process per data directory. The implementation identifies its instance with a timestamp-derived ID, not a process ID.",
+       "code": {
+        "file": "internal/di/container.go",
+        "start": 69,
+        "end": 74,
+        "anchor": "time.Now().UTC().UnixNano()"
+       }
+      },
+      {
+       "id": "c3.p22a",
+       "text": "Takeover gets only the file path, not the caller's instance ID; it refuses a file only when its stored ID is zero, and writes the stored ID back. It does not test whether another process is still alive.",
+       "code": {
+        "file": "executor/wal.go",
+        "start": 94,
+        "end": 118,
+        "anchor": "owningInstanceID"
+       }
+      },
+      {
+       "id": "c3.p23",
+       "text": "Assumption two: timestamps map to file positions in one configured timezone, UTC by default.",
+       "code": {
+        "file": "utils/io/timeindex.go",
+        "start": 28,
+        "end": 33,
+        "anchor": "ToSystemTimezone(t)"
+       }
+      },
+      {
+       "id": "c3.p24",
+       "text": "The executeQuery comment expects one timeframe and one attribute group per destination and calls more than one an error. But the handler only checks that a symbol, a timeframe and an attribute group are present.",
+       "code": {
+        "file": "frontend/query.go",
+        "start": 143,
+        "end": 163,
+        "anchor": "single destination"
+       }
+      },
+      {
+       "id": "c3.p24b",
+       "text": "When the planner adds the key, each category is split on commas and every item becomes a restriction, so one destination can read the files of several attribute groups.",
+       "code": {
+        "file": "planner/planner.go",
+        "start": 190,
+        "end": 238,
+        "anchor": "q.Restriction.AddRestriction(cat, item)"
+       }
+      },
+      {
+       "id": "c3.p24a",
+       "text": "Multi-symbol results need a common output schema after column projection; their source schemas may differ.",
+       "code": {
+        "file": "frontend/query.go",
+        "start": 231,
+        "end": 248,
+        "anchor": "filtered by common columns"
+       }
+      },
+      {
+       "id": "c3.p25",
+       "text": "The data gRPC server configures message sizes without TLS credentials or authentication. Keep these APIs inside a trusted deployment boundary.",
+       "code": {
+        "file": "internal/di/frontend.go",
+        "start": 36,
+        "end": 45,
+        "anchor": "grpc.NewServer("
+       }
+      },
+      {
+       "id": "c3.p25a",
+       "text": "HTTP serves data with plain ListenAndServe, so untrusted access needs external protection.",
+       "code": {
+        "file": "cmd/start/main.go",
+        "start": 201,
+        "end": 205,
+        "anchor": "http.ListenAndServe(config.ListenURL, nil)"
+       }
+      },
+      {
+       "id": "c3.p25c",
+       "text": "Listen host and ports form both data-API addresses. With the host empty, as generated, both ports listen on every network interface.",
+       "code": {
+        "file": "utils/config.go",
+        "start": 268,
+        "end": 271,
+        "anchor": "m.GRPCListenURL"
+       }
+      },
+      {
+       "id": "c3.p25b",
+       "text": "Optional replication TLS is configured separately and does not secure the data APIs.",
+       "code": {
+        "file": "internal/di/replication.go",
+        "start": 26,
+        "end": 45,
+        "anchor": "Replication.TLSEnabled"
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "c4",
+   "title": "Modules",
+   "items": [
+    {
+     "id": "c4.i1",
+     "title": "cmd: the command line",
+     "phrases": [
+      {
+       "id": "c4.p1",
+       "diagram": "d7-modules",
+       "diagramFocus": [
+        "cmd (CLI: start, connect, init, estimate, tool)"
+       ],
+       "text": "cmd is the user-facing binary. start runs the server, connect opens an interactive shell, init writes a config, estimate sizes the storage, and tool holds WAL and integrity utilities.",
+       "code": {
+        "file": "cmd/main.go",
+        "start": 36,
+        "end": 42,
+        "anchor": "c.AddCommand(connect.Cmd)"
+       },
+       "diagramComponents": [
+        "cmd"
+       ]
+      },
+      {
+       "id": "c4.p2",
+       "text": "connect can address a remote server or open a local data directory.",
+       "code": {
+        "file": "cmd/connect/main.go",
+        "start": 26,
+        "end": 33,
+        "anchor": "when used in local mode"
+       }
+      },
+      {
+       "id": "c4.p2a",
+       "text": "Local connect explicitly bypasses the WAL and disables background synchronization. Use remote mode for the demonstrated server workflow.",
+       "code": {
+        "file": "cmd/connect/session/local_api_client.go",
+        "start": 20,
+        "end": 26,
+        "anchor": "cfg.WALBypass = true"
+       }
+      },
+      {
+       "id": "c4.p2b",
+       "text": "Local imports can leave an already running server's catalog cache stale until restart.",
+       "code": {
+        "file": "cmd/connect/session/local_api_client.go",
+        "start": 63,
+        "end": 68,
+        "anchor": "cache"
+       }
+      }
+     ]
+    },
+    {
+     "id": "c4.i2",
+     "title": "internal/di: wiring",
+     "phrases": [
+      {
+       "id": "c4.p3",
+       "text": "internal di is a small dependency container. It holds references to the catalog, WAL, writer, API services, replication and triggers.",
+       "code": {
+        "file": "internal/di/container.go",
+        "start": 20,
+        "end": 39,
+        "anchor": "type Container struct"
+       }
+      },
+      {
+       "id": "c4.p3a",
+       "text": "Most getters build a service on first use and cache it, like the catalog getter, which returns nothing when the catalog is turned off in the configuration.",
+       "code": {
+        "file": "internal/di/catalog.go",
+        "start": 10,
+        "end": 32,
+        "anchor": "if c.catalogDir != nil"
+       }
+      },
+      {
+       "id": "c4.p4",
+       "text": "The dependency container gives replicas an ErrorWriter. This is an injected writer guard, not universal API protection.",
+       "code": {
+        "file": "internal/di/write.go",
+        "start": 10,
+        "end": 24,
+        "anchor": "WRITE is not allowed on a read replica"
+       }
+      },
+      {
+       "id": "c4.p4a",
+       "text": "HTTP Write uses that injected writer.",
+       "code": {
+        "file": "frontend/write.go",
+        "start": 36,
+        "end": 46,
+        "anchor": "s.writer.WriteCSM"
+       }
+      },
+      {
+       "id": "c4.p4b",
+       "text": "This release instead routes gRPC Write through the global executor function, bypassing the replica ErrorWriter.",
+       "code": {
+        "file": "frontend/grpc.go",
+        "start": 195,
+        "end": 209,
+        "anchor": "executor.WriteCSM"
+       }
+      },
+      {
+       "id": "c4.p4c",
+       "text": "Create and Destroy mutate the catalog without that writer guard; replica operation requires external restriction of these paths.",
+       "code": {
+        "file": "frontend/write.go",
+        "start": 105,
+        "end": 206,
+        "anchor": "s.catalogDir"
+       }
+      },
+      {
+       "id": "c4.p4d",
+       "text": "The gRPC Create and Destroy handlers likewise mutate the catalog without the injected writer guard.",
+       "code": {
+        "file": "frontend/grpc.go",
+        "start": 327,
+        "end": 376,
+        "anchor": "s.catalogDir"
+       }
+      },
+      {
+       "id": "c4.p4e",
+       "text": "SQL INSERT INTO, sent as a query over HTTP or gRPC, also writes through the global executor function, outside the replica guard. This is read from the code, not tested on a replica.",
+       "code": {
+        "file": "sqlparser/insertintostatement.go",
+        "start": 105,
+        "end": 114,
+        "anchor": "executor.WriteCSM(csm, isVariableLength)"
+       }
+      }
+     ]
+    },
+    {
+     "id": "c4.i3",
+     "title": "frontend: the API",
+     "phrases": [
+      {
+       "id": "c4.p5",
+       "text": "frontend serves data over JSON-RPC with MessagePack at slash rpc and over gRPC; the transports overlap but are not identical.",
+       "code": {
+        "file": "cmd/start/main.go",
+        "start": 119,
+        "end": 124,
+        "anchor": "http.Handle(\"/rpc\", c.GetHTTPServer())"
+       }
+      },
+      {
+       "id": "c4.p6",
+       "text": "Write accepts several datasets in one request, converts each into a column series map, and hands it to the writer.",
+       "code": {
+        "file": "frontend/write.go",
+        "start": 36,
+        "end": 51,
+        "anchor": "s.writer.WriteCSM(csm, req.IsVariableLength)"
+       }
+      },
+      {
+       "id": "c4.p7",
+       "text": "A query names a destination such as AAPL comma TSLA, slash 1Min, slash OHLCV, plus a time range in epoch seconds, a row limit, columns and optional functions.",
+       "code": {
+        "file": "frontend/query.go",
+        "start": 21,
+        "end": 47,
+        "anchor": "Destination is <symbol>/<timeframe>/<attributegroup>"
+       }
+      },
+      {
+       "id": "c4.p8",
+       "text": "The gRPC service declares Query, Create, Write, Destroy, ListSymbols and ServerVersion. Transport implementations can differ.",
+       "code": {
+        "file": "proto/marketstore.proto",
+        "start": 163,
+        "end": 170,
+        "anchor": "service Marketstore"
+       }
+      },
+      {
+       "id": "c4.p8a",
+       "text": "HTTP also exposes GetInfo, outside that gRPC service list.",
+       "code": {
+        "file": "frontend/write.go",
+        "start": 152,
+        "end": 169,
+        "anchor": "GetInfo"
+       }
+      },
+      {
+       "id": "c4.p9",
+       "text": "The WebSocket endpoint is slash ws; configured stream triggers supply its updates.",
+       "code": {
+        "file": "cmd/start/main.go",
+        "start": 126,
+        "end": 129,
+        "anchor": "http.HandleFunc(\"/ws\", stream.Handler)"
+       }
+      },
+      {
+       "id": "c4.p9a",
+       "text": "Clients subscribe to key patterns using MessagePack; payloads are also MessagePack.",
+       "code": {
+        "file": "contrib/stream/README.md",
+        "start": 62,
+        "end": 70,
+        "anchor": "All the messages are encoded in MessagePack"
+       }
+      },
+      {
+       "id": "c4.p9b",
+       "text": "The stream trigger queries only the latest row. Timeframes above one minute are shelved for delayed publication, so this is not a complete per-write event stream.",
+       "code": {
+        "file": "contrib/stream/streamtrigger/streamtrigger.go",
+        "start": 100,
+        "end": 137,
+        "anchor": "q.SetRowLimit(io.LAST, 1)"
+       }
+      }
+     ]
+    },
+    {
+     "id": "c4.i4",
+     "title": "catalog: the directory tree",
+     "phrases": [
+      {
+       "id": "c4.p10",
+       "diagram": "d2-on-disk",
+       "diagramFocus": [
+        "root_directory"
+       ],
+       "text": "catalog keeps the data directory as an in-memory tree of Directory nodes. Each node knows its category, its item name, its subdirectories and its year files.",
+       "code": {
+        "file": "catalog/catalog.go",
+        "start": 18,
+        "end": 38,
+        "anchor": "type Directory struct"
+       },
+       "diagramComponents": [
+        "data",
+        "sym",
+        "tf",
+        "ag"
+       ]
+      },
+      {
+       "id": "c4.p11",
+       "text": "Startup scans category files and year filenames, registering pending metadata references rather than reading every year-file header.",
+       "code": {
+        "file": "catalog/catalog.go",
+        "start": 56,
+        "end": 104,
+        "anchor": "IsRead = false"
+       }
+      },
+      {
+       "id": "c4.p11a",
+       "text": "A metadata getter loads its header lazily through sync.Once.",
+       "code": {
+        "file": "utils/io/metadata.go",
+        "start": 174,
+        "end": 202,
+        "anchor": "f.once.Do(f.initFromFile)"
+       }
+      },
+      {
+       "id": "c4.p12",
+       "text": "AddTimeBucket creates a new series on its first write: the directories, their category name files, and a year file built from a template.",
+       "code": {
+        "file": "catalog/catalog.go",
+        "start": 163,
+        "end": 191,
+        "anchor": "func (d *Directory) AddTimeBucket"
+       }
+      }
+     ]
+    },
+    {
+     "id": "c4.i5",
+     "title": "planner: which files to read",
+     "phrases": [
+      {
+       "id": "c4.p13",
+       "diagram": "d4-read-path",
+       "diagramFocus": [
+        "planner.Query.Parse",
+        "walk directory tree with restrictions",
+        "ParseResult: qualified year files, intervals/day"
+       ],
+       "text": "planner turns a query into a parse result. It walks the catalog tree, follows only the requested symbols, and collects the qualified year files.",
+       "code": {
+        "file": "planner/planner.go",
+        "start": 203,
+        "end": 275,
+        "anchor": "getFileList(q.DataDir, &pr.QualifiedFiles, \"\", \"\")"
+       },
+       "diagramComponents": [
+        "PL",
+        "CAT"
+       ]
+      },
+      {
+       "id": "c4.p14",
+       "text": "It also checks that all those files share one timeframe, because the reader computes positions from intervals per day.",
+       "code": {
+        "file": "planner/planner.go",
+        "start": 277,
+        "end": 287,
+        "anchor": "timeframe not the same in result set"
+       }
+      }
+     ]
+    },
+    {
+     "id": "c4.i6",
+     "title": "executor: writer, WAL, reader",
+     "phrases": [
+      {
+       "id": "c4.p15",
+       "diagram": "d3-write-path",
+       "diagramFocus": [
+        "check data shapes, coerce types,",
+        "ColumnSeries -> RowSeries"
+       ],
+       "text": "executor is the storage engine. The Writer checks incoming columns against the file's schema, coerces types, and converts columns to rows.",
+       "code": {
+        "file": "executor/writer.go",
+        "start": 322,
+        "end": 350,
+        "anchor": "GetMissingAndTypeCoercionColumns"
+       },
+       "diagramComponents": [
+        "W"
+       ]
+      },
+      {
+       "id": "c4.p16",
+       "text": "WriteRecords computes each row's index and offset, groups rows that share an index, and queues write commands for the WAL.",
+       "code": {
+        "file": "executor/writer.go",
+        "start": 87,
+        "end": 139,
+        "anchor": "index := io.TimeToIndex(t, tbi.GetTimeframe())"
+       }
+      },
+      {
+       "id": "c4.p17",
+       "diagram": "d5-wal-states",
+       "diagramFocus": [
+        "five-minute attempt if pending",
+        "CHECKPOINT: syncfs"
+       ],
+       "text": "The WAL background loop flushes periodically, on request, or above its queue threshold. Five-minute timer events attempt checkpoints; attempts can fail or have nothing to do.",
+       "code": {
+        "file": "executor/wal.go",
+        "start": 714,
+        "end": 763,
+        "anchor": "writeChannelCapThreshold"
+       },
+       "diagramComponents": [
+        "ck"
+       ]
+      },
+      {
+       "id": "c4.p18",
+       "text": "Those intervals are set where the WAL is created: 500 milliseconds and 5 minutes.",
+       "code": {
+        "file": "internal/di/wal.go",
+        "start": 56,
+        "end": 63,
+        "anchor": "defaultPrimaryDiskRefreshInterval = 5 * time.Minute"
+       }
+      },
+      {
+       "id": "c4.p19",
+       "diagram": "d4-read-path",
+       "diagramFocus": [
+        "executor.Reader",
+        "NewReader(ParseResult): IO plan per key"
+       ],
+       "text": "The Reader builds one input-output plan, an IO plan, per series, and sorts the year files.",
+       "code": {
+        "file": "executor/scanner.go",
+        "start": 148,
+        "end": 178,
+        "anchor": "sort.Sort(sfl)"
+       },
+       "diagramComponents": [
+        "R",
+        "P"
+       ]
+      },
+      {
+       "id": "c4.p19a",
+       "diagram": "d4-read-path",
+       "diagramFocus": [
+        "in 8192-record chunks; skip holes (index 0)"
+       ],
+       "diagramComponents": [
+        "R",
+        "P"
+       ],
+       "text": "Reads go through a buffer of 8192 records.",
+       "code": {
+        "file": "executor/scanner.go",
+        "start": 20,
+        "end": 25,
+        "anchor": "recordsPerRead"
+       }
+      },
+      {
+       "id": "c4.p19b",
+       "text": "Its size is that count times the longest record length in the query.",
+       "code": {
+        "file": "executor/scanner.go",
+        "start": 171,
+        "end": 176,
+        "anchor": "readSize := recordsPerRead * maxRecordLen"
+       },
+       "diagram": "d4-read-path",
+       "diagramComponents": [
+        "R",
+        "P"
+       ]
+      },
+      {
+       "id": "c4.p20",
+       "text": "Forward scans seek to the lower bound and read buffered slots, including holes.",
+       "code": {
+        "file": "executor/scanner.go",
+        "start": 486,
+        "end": 515,
+        "anchor": "f.Seek(fp.Offset, io.SeekStart)"
+       }
+      },
+      {
+       "id": "c4.p20a",
+       "text": "Last-N reads seek to the right edge, then scan backward in buffered chunks.",
+       "code": {
+        "file": "executor/scanner.go",
+        "start": 525,
+        "end": 575,
+        "anchor": "f.Seek(beginPos+fp.Length, io.SeekStart)"
+       }
+      }
+     ]
+    },
+    {
+     "id": "c4.i7",
+     "title": "utils/io: the data model",
+     "phrases": [
+      {
+       "id": "c4.p21",
+       "text": "A TimeBucketKey names a series: items such as AAPL, 1Min, OHLCV, plus the category schema Symbol, Timeframe, AttributeGroup.",
+       "code": {
+        "file": "utils/io/keytypes.go",
+        "start": 13,
+        "end": 35,
+        "anchor": "DefaultTimeBucketSchema"
+       }
+      },
+      {
+       "id": "c4.p22",
+       "text": "A ColumnSeries is a set of named column slices: the server's in-memory DataFrame.",
+       "code": {
+        "file": "utils/io/columnseries.go",
+        "start": 34,
+        "end": 47,
+        "anchor": "type ColumnSeries struct"
+       }
+      },
+      {
+       "id": "c4.p22a",
+       "text": "A DataShape pairs a column name with its element type.",
+       "code": {
+        "file": "utils/io/datashape.go",
+        "start": 10,
+        "end": 13,
+        "anchor": "type DataShape struct"
+       }
+      }
+     ]
+    },
+    {
+     "id": "c4.i8",
+     "title": "sqlparser and uda: SQL subset and aggregates",
+     "phrases": [
+      {
+       "id": "c4.p23",
+       "text": "Aggregates implement AggInterface: they declare the columns they need, and accumulate a column series into a result.",
+       "code": {
+        "file": "uda/datatypes.go",
+        "start": 25,
+        "end": 39,
+        "anchor": "type AggInterface interface"
+       }
+      },
+      {
+       "id": "c4.p24",
+       "text": "AggRunner chains the functions named in a query: each function's output is the next one's input.",
+       "code": {
+        "file": "sqlparser/registry.go",
+        "start": 51,
+        "end": 56,
+        "anchor": "func (ar *AggRunner) Run"
+       }
+      },
+      {
+       "id": "c4.p24a",
+       "text": "Default functions include count, min, max, avg, gap, adjust, tickcandler and candlecandler.",
+       "code": {
+        "file": "sqlparser/registry.go",
+        "start": 32,
+        "end": 45,
+        "anchor": "\"candlecandler\""
+       }
+      },
+      {
+       "id": "c4.p24c",
+       "text": "Function support is explicitly experimental and subject to change.",
+       "code": {
+        "file": "frontend/query.go",
+        "start": 42,
+        "end": 46,
+        "anchor": "experimental and subject to change"
+       }
+      },
+      {
+       "id": "c4.p24b",
+       "text": "A representative test requests candlecandler with a five-minute window and Open, High, Low and Close columns.",
+       "code": {
+        "file": "frontend/query_test.go",
+        "start": 360,
+        "end": 368,
+        "anchor": "candlecandler('5Min',Open,High,Low,Close)"
+       }
+      },
+      {
+       "id": "c4.p25",
+       "text": "Parser regeneration invokes Java with the configured ANTLR jar, then go generate. Ordinary Go builds use the checked-in generated parser.",
+       "code": {
+        "file": "sqlparser/Makefile",
+        "start": 1,
+        "end": 8,
+        "anchor": "antlr-4.9.2-complete.jar"
+       }
+      }
+     ]
+    },
+    {
+     "id": "c4.d9",
+     "title": "Schema: plugins",
+     "phrases": [
+      {
+       "id": "t3.p13",
+       "diagram": "d9-plugins",
+       "diagramComponents": [
+        "cfg",
+        "load"
+       ],
+       "text": "Plugins are listed in mkts dot yml and loaded at start-up as Go plugin files."
+      },
+      {
+       "id": "t3.p14",
+       "diagram": "d9-plugins",
+       "diagramComponents": [
+        "trig"
+       ],
+       "diagramFocus": [
+        "e.g. ondiskagg: 1Min -> 5Min/1H/1D bars"
+       ],
+       "text": "Trigger plugins react to writes. The on-disk aggregator, for example, builds larger bars from one-minute bars."
+      },
+      {
+       "id": "t3.p15",
+       "diagram": "d9-plugins",
+       "diagramComponents": [
+        "bg",
+        "w"
+       ],
+       "text": "Background-worker plugins run their own loop, and write the market data they fetch through WriteCSM."
+      },
+      {
+       "id": "t3.p16",
+       "diagram": "d9-plugins",
+       "diagramFocus": [
+        "Load test runs only on Linux (plugins/load_test.go)."
+       ],
+       "text": "Plugins are opened with Go's plugin package. This tree tests plugin loading only on Linux, and its contrib notes name Linux and macOS; WSL is one Linux option."
+      }
+     ]
+    },
+    {
+     "id": "c4.i9",
+     "title": "plugins: triggers and background workers",
+     "phrases": [
+      {
+       "id": "c4.p26",
+       "diagram": "d9-plugins",
+       "diagramFocus": [
+        "NewTrigger(config) -> Fire(keyPath, records)",
+        "match 'on' pattern, fire in goroutine,"
+       ],
+       "text": "A trigger plugin implements Fire, which receives the written file's key path and the records. The on pattern in the config decides which writes fire it.",
+       "code": {
+        "file": "plugins/trigger/trigger.go",
+        "start": 1,
+        "end": 43,
+        "anchor": "Fire(keyPath string, records []Record)"
+       },
+       "diagramComponents": [
+        "trig",
+        "disp"
+       ]
+      },
+      {
+       "id": "c4.p27",
+       "text": "A background worker implements Run and gets its own goroutine. The server does not catch its panics.",
+       "code": {
+        "file": "plugins/bgworker/bgworker.go",
+        "start": 1,
+        "end": 24,
+        "anchor": "does not handle panics"
+       }
+      }
+     ]
+    },
+    {
+     "id": "c4.i10",
+     "title": "replication",
+     "phrases": [
+      {
+       "id": "c4.p28",
+       "diagram": "d8-replication",
+       "diagramFocus": [
+        "Send(TG bytes) after WAL fsync",
+        "stream.Send(TransactionGroup)"
+       ],
+       "text": "Replication ships live WAL transaction groups: the master queues each group for replication right after the WAL fsync.",
+       "code": {
+        "file": "executor/wal.go",
+        "start": 313,
+        "end": 320,
+        "anchor": "wf.ReplicationSender.Send(tgSerialized)"
+       },
+       "diagramComponents": [
+        "MW",
+        "SND",
+        "GS",
+        "RCV"
+       ]
+      },
+      {
+       "id": "c4.p28b",
+       "text": "Deletes are not replicated: the delete call, Destroy, removes a series directly through the catalog, so there is no WAL group to ship.",
+       "code": {
+        "file": "frontend/write.go",
+        "start": 182,
+        "end": 210,
+        "anchor": "s.catalogDir.RemoveTimeBucket(tbk)"
+       }
+      },
+      {
+       "id": "c4.p28a",
+       "text": "The stream request has no cursor or snapshot parameters. Initial synchronization and historical catch-up require a separate procedure.",
+       "code": {
+        "file": "proto/replication.proto",
+        "start": 120,
+        "end": 125,
+        "anchor": "message GetWALStreamRequest"
+       }
+      }
+     ]
+    },
+    {
+     "id": "c4.i11",
+     "title": "contrib: feeders and aggregation",
+     "phrases": [
+      {
+       "id": "c4.p29",
+       "text": "contrib holds the plugins: feeders such as the Alpaca broker feeder, Polygon, IEX and crypto exchanges, plus on-disk aggregation and streaming.",
+       "code": {
+        "file": "contrib/alpacabkfeeder/alpacav2.go",
+        "start": 24,
+        "end": 30,
+        "anchor": "Alpaca Broker API Feeder"
+       }
+      },
+      {
+       "id": "c4.p30",
+       "text": "ondiskagg iterates configured destinations and computes each aggregate. Its trigger pattern should select base data without creating a feedback loop.",
+       "code": {
+        "file": "contrib/ondiskagg/aggtrigger/aggtrigger.go",
+        "start": 179,
+        "end": 201,
+        "anchor": "s.writeAggregates"
+       }
+      },
+      {
+       "id": "c4.p30a",
+       "text": "Derived bars are written back through executor.WriteCSM, so matching trigger patterns can fire again.",
+       "code": {
+        "file": "contrib/ondiskagg/aggtrigger/aggtrigger.go",
+        "start": 269,
+        "end": 292,
+        "anchor": "executor.WriteCSM"
+       },
+       "diagram": "d9-plugins",
+       "diagramComponents": [
+        "trig",
+        "w"
+       ]
+      },
+      {
+       "id": "c4.p30b",
+       "text": "The aggregator reads base data through QueryService before calculating derived bars.",
+       "code": {
+        "file": "contrib/ondiskagg/aggtrigger/aggtrigger.go",
+        "start": 400,
+        "end": 419,
+        "anchor": "qs.ExecuteQuery"
+       },
+       "diagram": "d9-plugins",
+       "diagramComponents": [
+        "trig",
+        "q"
+       ]
+      }
+     ]
+    },
+    {
+     "id": "c4.i12",
+     "title": "metrics and logging",
+     "phrases": [
+      {
+       "id": "c4.p31",
+       "text": "Operations expose Prometheus metrics and an optional utilities endpoint for profiling and heartbeat.",
+       "code": {
+        "file": "cmd/start/main.go",
+        "start": 131,
+        "end": 148,
+        "anchor": "promhttp.Handler()"
+       }
+      },
+      {
+       "id": "c4.p31a",
+       "text": "Startup also launches the disk-usage monitor.",
+       "code": {
+        "file": "cmd/start/main.go",
+        "start": 98,
+        "end": 107,
+        "anchor": "disk"
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "c5",
+   "title": "Workflows: call hierarchy, debug points, logs",
+   "items": [
+    {
+     "id": "c5.i1",
+     "title": "W1 Server start-up: schema, then the call hierarchy",
+     "phrases": [
+      {
+       "id": "c5.w1",
+       "diagram": "d6-startup",
+       "text": "The first workflow is server start-up. Here is its schema; the code follows."
+      },
+      {
+       "id": "t3.p6",
+       "diagram": "d6-startup",
+       "diagramComponents": [
+        "M",
+        "X"
+       ],
+       "diagramFocus": [
+        "Execute()",
+        "start subcommand"
+       ],
+       "text": "Start-up begins in main, which hands over to the command tree and its start command."
+      },
+      {
+       "id": "t3.p7",
+       "diagram": "d6-startup",
+       "diagramComponents": [
+        "S",
+        "D"
+       ],
+       "diagramFocus": [
+        "read + ParseConfig(mkts.yml)",
+        "NewContainer(config)"
+       ],
+       "text": "executeStart reads the configuration and builds the dependency container."
+      },
+      {
+       "id": "t3.p8",
+       "diagram": "d6-startup",
+       "diagramComponents": [
+        "W"
+       ],
+       "diagramFocus": [
+        "GetCatalogDir() (scan data dir), GetInitWALFile()",
+        "CleanupOldWALFiles -> Replay;"
+       ],
+       "text": "The catalog is scanned and the WAL is created. Unless the WAL is bypassed, older WAL files, such as one left by a crash, are replayed."
+      },
+      {
+       "id": "t3.p9",
+       "diagram": "d6-startup",
+       "diagramComponents": [
+        "H",
+        "B"
+       ],
+       "diagramFocus": [
+        "register gRPC service, /rpc, /ws, /metrics",
+        "RunBgWorkers(config.BgWorkers)",
+        "Queryable = 1 (readiness, not Query admission)",
+        "http.ListenAndServe(listen_port)"
+       ],
+       "text": "The APIs are registered and background workers start. Startup sets a readiness flag before opening listeners; it is not a general Query admission guard."
+      },
+      {
+       "id": "c5.p1",
+       "diagram": "d6-startup",
+       "diagramFocus": [
+        "executeStart",
+        "read + ParseConfig(mkts.yml)"
+       ],
+       "text": "Scenario one is start-up: marketstore start with a config file. executeStart reads and parses the YAML.",
+       "code": {
+        "file": "cmd/start/main.go",
+        "start": 61,
+        "end": 83,
+        "anchor": "func executeStart"
+       },
+       "action": {
+        "kind": "debug",
+        "where": "IDEA (Go remote debug to WSL) or WSL dlv",
+        "do": "Use the debug build from c2.p11a; the make build binary is stripped. Breakpoint at executeStart (cmd/start/main.go). From the scratch checkout: dlv exec ./marketstore-debug -- start --config /absolute/scratch/mkts.yml, or start it headless as in c2.p11a and attach the IDE's Go Remote configuration.",
+        "status": "needs-approval",
+        "why": "needs the debug build and Delve"
+       },
+       "diagramComponents": [
+        "S"
+       ],
+       "pauseAfter": true
+      },
+      {
+       "id": "c5.p2",
+       "diagram": "d6-startup",
+       "diagramFocus": [
+        "NewContainer(config)",
+        "GetReplicationSender().Run, trigger dispatcher"
+       ],
+       "text": "It builds the container, then starts the replication sender and the trigger dispatcher.",
+       "code": {
+        "file": "cmd/start/main.go",
+        "start": 85,
+        "end": 90,
+        "anchor": "di.NewContainer(config)"
+       },
+       "diagramComponents": [
+        "S",
+        "D"
+       ]
+      },
+      {
+       "id": "c5.p3",
+       "diagram": "d6-startup",
+       "diagramFocus": [
+        "GetCatalogDir() (scan data dir), GetInitWALFile()"
+       ],
+       "text": "Next, the catalog getter scans the data directory into the in-memory catalog tree.",
+       "code": {
+        "file": "internal/di/catalog.go",
+        "start": 10,
+        "end": 32,
+        "anchor": "catalog.NewDirectory(c.GetAbsRootDir())"
+       },
+       "diagramComponents": [
+        "D"
+       ]
+      },
+      {
+       "id": "c5.p3a",
+       "diagram": "d6-startup",
+       "diagramFocus": [
+        "NewWALFile; unless bypassed: find old WAL files,"
+       ],
+       "text": "Then the WAL getter creates this run's new WAL file.",
+       "code": {
+        "file": "internal/di/wal.go",
+        "start": 23,
+        "end": 35,
+        "anchor": "executor.NewWALFile(c.GetAbsRootDir()"
+       },
+       "diagramComponents": [
+        "W"
+       ]
+      },
+      {
+       "id": "c5.p3b",
+       "diagram": "d6-startup",
+       "diagramFocus": [
+        "NewWALFile; unless bypassed: find old WAL files,",
+        "CleanupOldWALFiles -> Replay;"
+       ],
+       "text": "Unless the WAL is bypassed, the getter then finds older WAL files in the data directory, such as one left by a crash, and hands them to the cleaner.",
+       "code": {
+        "file": "internal/di/wal.go",
+        "start": 37,
+        "end": 55,
+        "anchor": "CleanupOldWALFiles(walFileAbsPaths)"
+       },
+       "diagramComponents": [
+        "W"
+       ]
+      },
+      {
+       "id": "c5.p4",
+       "text": "The cleaner enters replay. Selected recoverable replay errors move the WAL to a dot-tmp file; other errors can stop cleanup or startup.",
+       "code": {
+        "file": "executor/walclean.go",
+        "start": 32,
+        "end": 70,
+        "anchor": "entering replay"
+       }
+      },
+      {
+       "id": "c5.p5",
+       "diagram": "d5-wal-states",
+       "diagramFocus": [
+        "initialization finds old file",
+        "(WALCleaner -> Replay)",
+        "{1,3} OPEN, REPLAY IN PROCESS"
+       ],
+       "text": "Replay reads group data and transaction states. Completed checkpoints remove covered data; collected WAL commit states are not used as the replay filter.",
+       "code": {
+        "file": "executor/walreplay.go",
+        "start": 64,
+        "end": 114,
+        "anchor": "txnStateWAL[TGID] = txnStatus"
+       },
+       "diagramComponents": [
+        "s13",
+        "c",
+        "pr"
+       ]
+      },
+      {
+       "id": "c5.p5a",
+       "text": "The second pass replays the remaining nonempty groups into primary storage.",
+       "code": {
+        "file": "executor/walreplay.go",
+        "start": 126,
+        "end": 155,
+        "anchor": "wf.replayTGData"
+       }
+      },
+      {
+       "id": "c5.p5b",
+       "text": "Variable-record recovery calls the indirect writer again. Duplicate append is a source-derived risk to test when payload reached primary storage before a crash; exactly-once contents are not established.",
+       "code": {
+        "file": "executor/walreplay.go",
+        "start": 182,
+        "end": 204,
+        "anchor": "WriteBufferToFileIndirect"
+       }
+      },
+      {
+       "id": "c5.p6",
+       "text": "Then come the APIs: the gRPC service, JSON-RPC at slash rpc, the WebSocket at slash ws, and metrics.",
+       "code": {
+        "file": "cmd/start/main.go",
+        "start": 119,
+        "end": 133,
+        "anchor": "pb.RegisterMarketstoreServer"
+       }
+      },
+      {
+       "id": "c5.p7",
+       "text": "Background workers start and Queryable is set before the main listeners open. This readiness flag is not checked by the Query handlers.",
+       "code": {
+        "file": "cmd/start/main.go",
+        "start": 135,
+        "end": 151,
+        "anchor": "atomic.StoreUint32(&frontend.Queryable, 1)"
+       }
+      },
+      {
+       "id": "c5.p7a",
+       "text": "ListSymbols rejects requests while Queryable is zero.",
+       "code": {
+        "file": "frontend/query.go",
+        "start": 259,
+        "end": 270,
+        "anchor": "Queryable"
+       }
+      },
+      {
+       "id": "c5.p7b",
+       "text": "Heartbeat also reports the readiness flag.",
+       "code": {
+        "file": "frontend/utilities.go",
+        "start": 48,
+        "end": 56,
+        "anchor": "atomic.LoadUint32(&Queryable)"
+       }
+      },
+      {
+       "id": "c5.p8",
+       "text": "Last comes the signal handler. SIGUSR1 dumps goroutine stacks. SIGINT or SIGTERM stops gRPC, waits for the grace period, and calls the WAL's Shutdown.",
+       "code": {
+        "file": "cmd/start/main.go",
+        "start": 169,
+        "end": 200,
+        "anchor": "dumping stack traces due to SIGUSR1 request"
+       }
+      },
+      {
+       "id": "c5.p8a",
+       "text": "Shutdown sets a flag and waits; the background sync loop then flushes and checkpoints.",
+       "code": {
+        "file": "executor/wal.go",
+        "start": 764,
+        "end": 806,
+        "anchor": "*wf.shutdownPending = true"
+       }
+      },
+      {
+       "id": "c5.p8b",
+       "text": "That loop starts only when background sync is on, the default. With it off, no checkpoint runs after start-up, not even at shutdown.",
+       "code": {
+        "file": "internal/di/wal.go",
+        "start": 56,
+        "end": 64,
+        "anchor": "if c.mktsConfig.BackgroundSync {"
+       }
+      },
+      {
+       "id": "c5.p9",
+       "text": "A healthy start-up log reads, in order: using config, initializing marketstore, startup time, launching rpc data server, enabling query access, launching tcp listener.",
+       "code": {
+        "file": "cmd/start/main.go",
+        "start": 76,
+        "end": 154,
+        "anchor": "launching tcp listener for all services"
+       },
+       "action": {
+        "kind": "log",
+        "where": "WSL",
+        "do": "start with a scratch data directory and capture the start-up log",
+        "status": "needs-approval",
+        "why": "needs the build"
+       },
+       "pauseAfter": true
+      }
+     ]
+    },
+    {
+     "id": "c5.d3",
+     "title": "Schema: write path",
+     "phrases": [
+      {
+       "id": "t2.p7",
+       "diagram": "d3-write-path",
+       "diagramComponents": [
+        "C",
+        "F"
+       ],
+       "diagramFocus": [
+        "/rpc Write(MultiWriteRequest, msgpack)"
+       ],
+       "text": "The write path starts with a client sending a write request to the JSON-RPC endpoint."
+      },
+      {
+       "id": "t2.p8",
+       "diagram": "d3-write-path",
+       "diagramComponents": [
+        "F",
+        "W"
+       ],
+       "diagramFocus": [
+        "WriteCSM(ColumnSeriesMap, isVariableLength)"
+       ],
+       "text": "The data service hands the columns to the writer's WriteCSM."
+      },
+      {
+       "id": "t2.p9",
+       "diagram": "d3-write-path",
+       "diagramComponents": [
+        "W",
+        "CAT"
+       ],
+       "diagramFocus": [
+        "GetLatestTimeBucketInfoFromKey",
+        "check data shapes, coerce types,"
+       ],
+       "text": "The writer finds the series in the catalog, or creates its directories and file, then checks and converts the data."
+      },
+      {
+       "id": "t2.p10",
+       "diagram": "d3-write-path",
+       "diagramFocus": [
+        "WriteRecords: TimeToIndex, IndexToOffset",
+        "WriteCommand + QueueWriteCommand (channel)"
+       ],
+       "text": "Writer.WriteRecords computes indexes and offsets, then queues the grouped commands in the WAL channel."
+      },
+      {
+       "id": "t2.p11",
+       "diagram": "d3-write-path",
+       "diagramComponents": [
+        "S"
+       ],
+       "diagramFocus": [
+        "RequestFlush(): wait unless flush already queued",
+        "flushChannel",
+        "FlushToWAL()"
+       ],
+       "text": "RequestFlush usually waits for a requested flush. An already queued request returns immediately; without a background writer it flushes synchronously. Flush errors are logged, not propagated."
+      },
+      {
+       "id": "t2.p12",
+       "diagram": "d3-write-path",
+       "diagramComponents": [
+        "WF"
+       ],
+       "diagramFocus": [
+        "TI(WAL, PREPARING)",
+        "MID TGDATA + TG length + TG + MD5",
+        "TI(WAL, COMMITCOMPLETE) + fsync"
+       ],
+       "text": "The group goes into the WAL file: a prepare marker, the data with an MD5 checksum, and a commit marker, followed by an fsync."
+      },
+      {
+       "id": "t2.p13",
+       "diagram": "d3-write-path",
+       "diagramComponents": [
+        "R",
+        "P"
+       ],
+       "diagramFocus": [
+        "Send(TG) to replicas",
+        "writePrimary: WriteAt(offset, index+payload)",
+        "(overwrite slot; page cache, no fsync here)"
+       ],
+       "text": "After WAL fsync, replication is enqueued and primary writes begin. Fixed records overwrite slots; variable records merge payloads through an indirect slot."
+      },
+      {
+       "id": "t2.p14",
+       "diagram": "d3-write-path",
+       "diagramComponents": [
+        "T",
+        "C"
+       ],
+       "diagramFocus": [
+        "AppendRecord + DispatchRecords",
+        "MultiServerResponse"
+       ],
+       "text": "Normal flush dispatches triggers asynchronously. Client success does not unconditionally prove durability or completed derived updates."
+      },
+      {
+       "id": "t2.p15",
+       "diagram": "d3-write-path",
+       "diagramComponents": [
+        "WF"
+       ],
+       "diagramFocus": [
+        "every 5 min (primary refresh attempt)",
+        "every wal_rotate_interval timer events: truncate WAL"
+       ],
+       "text": "Every five minutes the loop attempts a checkpoint. Rotation counts timer events, including empty or failed attempts, rather than completed checkpoints."
+      }
+     ]
+    },
+    {
+     "id": "c5.i2",
+     "title": "W2 Write",
+     "phrases": [
+      {
+       "id": "c5.p10",
+       "diagram": "d3-write-path",
+       "diagramFocus": [
+        "/rpc Write(MultiWriteRequest, msgpack)",
+        "WriteCSM(ColumnSeriesMap, isVariableLength)"
+       ],
+       "text": "Scenario two is a write. The client sends a msgpack write request to slash rpc. DataService Write converts each dataset and calls WriteCSM.",
+       "code": {
+        "file": "frontend/write.go",
+        "start": 36,
+        "end": 46,
+        "anchor": "req.Data.ToColumnSeriesMap()"
+       },
+       "action": {
+        "kind": "debug",
+        "where": "IDEA",
+        "do": "Breakpoints: DataService.Write, Writer.WriteCSM, WALFileType.FlushCommandsToWAL, writePrimary. Run marketstore-debug with its debug plugins under Delve, as in the debug build of c2.p11a; then use the exact CWDEMO fixture and enabled mkts.yml there over remote pymarketstore; do not use local connect.",
+        "status": "needs-approval",
+        "why": "needs the debug build and Delve"
+       },
+       "diagramComponents": [
+        "C",
+        "F",
+        "W"
+       ],
+       "pauseAfter": true
+      },
+      {
+       "id": "c5.p11",
+       "diagram": "d3-write-path",
+       "diagramFocus": [
+        "GetLatestTimeBucketInfoFromKey",
+        "(or AddTimeBucket: create dirs + file)"
+       ],
+       "text": "WriteCSM looks the series up in the catalog, or, on a first write, creates its directories and its year file.",
+       "code": {
+        "file": "executor/writer.go",
+        "start": 285,
+        "end": 321,
+        "anchor": "Created By Writer"
+       },
+       "diagramComponents": [
+        "W",
+        "CAT"
+       ]
+      },
+      {
+       "id": "c5.p12",
+       "diagram": "d3-write-path",
+       "diagramFocus": [
+        "WriteRecords: TimeToIndex, IndexToOffset",
+        "WriteCommand + QueueWriteCommand (channel)"
+       ],
+       "text": "Writer.WriteRecords computes indexes, groups rows and queues commands at each boundary and after the final group.",
+       "code": {
+        "file": "executor/writer.go",
+        "start": 99,
+        "end": 138,
+        "anchor": "w.walFile.QueueWriteCommand(cc)"
+       },
+       "diagramComponents": [
+        "W",
+        "WAL"
+       ]
+      },
+      {
+       "id": "c5.p13",
+       "diagram": "d3-write-path",
+       "diagramFocus": [
+        "RequestFlush(): wait unless flush already queued",
+        "flushChannel"
+       ],
+       "text": "RequestFlush waits unless another flush is queued, or runs synchronously without a background writer. It logs flush errors; WriteCSM does not receive those errors.",
+       "code": {
+        "file": "executor/wal.go",
+        "start": 787,
+        "end": 801,
+        "anchor": "func (wf *WALFileType) RequestFlush()"
+       },
+       "diagramComponents": [
+        "W",
+        "S"
+       ]
+      },
+      {
+       "id": "c5.p14",
+       "diagram": "d3-write-path",
+       "diagramFocus": [
+        "FlushToWAL()",
+        "TI(WAL, PREPARING)"
+       ],
+       "text": "FlushToWAL drains the queue into one transaction group and writes the prepare marker.",
+       "code": {
+        "file": "executor/wal.go",
+        "start": 226,
+        "end": 261,
+        "anchor": "WAL Transaction Preparing Message"
+       },
+       "diagramComponents": [
+        "S",
+        "WF"
+       ]
+      },
+      {
+       "id": "c5.p15",
+       "diagram": "d3-write-path",
+       "diagramFocus": [
+        "MID TGDATA + TG length + TG + MD5",
+        "TI(WAL, COMMITCOMPLETE) + fsync",
+        "Send(TG) to replicas",
+        "writePrimary: WriteAt(offset, index+payload)",
+        "AppendRecord + DispatchRecords"
+       ],
+       "text": "Normal flush writes the group, checksum and commit marker, then fsyncs the WAL. Replication and primary writes follow; trigger records are dispatched even after a logged primary-write failure.",
+       "code": {
+        "file": "executor/wal.go",
+        "start": 263,
+        "end": 340,
+        "anchor": "defer wf.tpd.DispatchRecords()"
+       },
+       "diagramComponents": [
+        "WF",
+        "R",
+        "P",
+        "T"
+       ]
+      },
+      {
+       "id": "c5.p15a",
+       "text": "Variable writes read existing payload, optionally decompress it, and append incoming events before sorting.",
+       "code": {
+        "file": "executor/writer.go",
+        "start": 195,
+        "end": 226,
+        "anchor": "dataToBeWritten = append(oldData, dataToBeWritten...)"
+       }
+      },
+      {
+       "id": "c5.p15b",
+       "text": "They sort by timestamp, optionally Snappy-compress, write the merged tail payload, and update the indirect index/offset/length slot.",
+       "code": {
+        "file": "executor/writer.go",
+        "start": 223,
+        "end": 257,
+        "anchor": "targetRecInfo := IndirectRecordInfo"
+       }
+      },
+      {
+       "id": "c5.p16",
+       "text": "Writes are quiet in the log when they succeed. Their duration goes to a Prometheus histogram.",
+       "code": {
+        "file": "executor/writer.go",
+        "start": 356,
+        "end": 357,
+        "anchor": "metrics.WriteCSMDuration"
+       }
+      }
+     ]
+    },
+    {
+     "id": "c5.d4",
+     "title": "Schema: query path",
+     "phrases": [
+      {
+       "id": "t3.p1",
+       "diagram": "d4-read-path",
+       "diagramFocus": [
+        "/rpc Query(destination",
+        "epoch_start/end, limit, columns, functions)"
+       ],
+       "text": "A query names a destination, a time range, a row limit, the columns, and optional functions."
+      },
+      {
+       "id": "t3.p2",
+       "diagram": "d4-read-path",
+       "diagramComponents": [
+        "F",
+        "Q"
+       ],
+       "diagramFocus": [
+        "TimeBucketKey; \"*\" -> all symbols",
+        "ExecuteQuery(tbk, start, end, limit, columns)"
+       ],
+       "text": "executeQuery builds the key, where a star stands for all symbols, and calls ExecuteQuery."
+      },
+      {
+       "id": "t3.p3",
+       "diagram": "d4-read-path",
+       "diagramComponents": [
+        "PL",
+        "CAT"
+       ],
+       "diagramFocus": [
+        "walk directory tree with restrictions",
+        "ParseResult: qualified year files, intervals/day"
+       ],
+       "text": "The planner walks the directory tree and returns the qualified year files."
+      },
+      {
+       "id": "t3.p4",
+       "diagram": "d4-read-path",
+       "diagramComponents": [
+        "R",
+        "P"
+       ],
+       "diagramFocus": [
+        "fixed slots: forward from lower bound / backward from right edge",
+        "in 8192-record chunks; skip holes (index 0)"
+       ],
+       "text": "Forward reads start at the lower offset; last-N reads start at the right edge. Both scan buffered slots and skip zero indexes; variable records require payload dereferencing."
+      },
+      {
+       "id": "t3.p5",
+       "diagram": "d4-read-path",
+       "diagramComponents": [
+        "AG",
+        "C"
+       ],
+       "diagramFocus": [
+        "optional functions pipeline (materialized)",
+        "NumpyMultiDataset (columnar, msgpack)"
+       ],
+       "text": "The result comes back as columns. Optional functions run on it, and the client receives a columnar dataset."
+      }
+     ]
+    },
+    {
+     "id": "c5.i3",
+     "title": "W3 Query",
+     "phrases": [
+      {
+       "id": "c5.p17",
+       "diagram": "d4-read-path",
+       "diagramFocus": [
+        "/rpc Query(destination"
+       ],
+       "text": "Scenario three is a query. Query loops over the requests: SQL statements go down the SQL path, everything else to executeQuery.",
+       "code": {
+        "file": "frontend/query.go",
+        "start": 91,
+        "end": 116,
+        "anchor": "s.executeSQL(reqs.Requests[i].SQLStatement)"
+       },
+       "action": {
+        "kind": "debug",
+        "where": "IDEA",
+        "do": "Breakpoints: executeQuery, QueryService.ExecuteQuery, Query.Parse, Reader.Read. Run marketstore-debug under Delve, as in the debug build of c2.p11a, then query the bars written in W2.",
+        "status": "needs-approval",
+        "why": "needs the debug build and Delve"
+       },
+       "diagramComponents": [
+        "C",
+        "F"
+       ],
+       "pauseAfter": true
+      },
+      {
+       "id": "c5.p18",
+       "diagram": "d4-read-path",
+       "diagramFocus": [
+        "TimeBucketKey; \"*\" -> all symbols"
+       ],
+       "text": "executeQuery parses the destination key. A star in place of the symbol expands to every symbol in the catalog.",
+       "code": {
+        "file": "frontend/query.go",
+        "start": 153,
+        "end": 173,
+        "anchor": "gatherAllSymbols(s.catalogDir)"
+       },
+       "diagramComponents": [
+        "F",
+        "Q"
+       ]
+      },
+      {
+       "id": "c5.p19",
+       "diagram": "d4-read-path",
+       "diagramFocus": [
+        "storage timeframe, expanded row limit (FIRST/LAST)",
+        "Parse()"
+       ],
+       "text": "ExecuteQuery selects a storage timeframe and expands the row limit. It does not automatically aggregate the returned rows.",
+       "code": {
+        "file": "frontend/query.go",
+        "start": 304,
+        "end": 337,
+        "anchor": "queryableTimeframe := cd.QueryableTimeframe()"
+       },
+       "diagramComponents": [
+        "Q",
+        "PL"
+       ]
+      },
+      {
+       "id": "c5.p19a",
+       "text": "For example, three-minute requests select one-minute storage. Request an explicit candlecandler function when three-minute bars are needed.",
+       "code": {
+        "file": "utils/timeframe.go",
+        "start": 189,
+        "end": 216,
+        "anchor": "QueryableNrecords"
+       }
+      },
+      {
+       "id": "c5.p20",
+       "diagram": "d4-read-path",
+       "diagramFocus": [
+        "Read()",
+        "fixed slots: forward from lower bound / backward from right edge",
+        "FilterColumns(columns)"
+       ],
+       "text": "The reader reads those files, and the result is cut down to the requested columns.",
+       "code": {
+        "file": "frontend/query.go",
+        "start": 348,
+        "end": 361,
+        "anchor": "scanner.Read()"
+       },
+       "diagramComponents": [
+        "R",
+        "P"
+       ]
+      },
+      {
+       "id": "c5.p20a",
+       "text": "For variable records the scanner performs a second-stage payload read.",
+       "code": {
+        "file": "executor/scanner.go",
+        "start": 401,
+        "end": 408,
+        "anchor": "r.readSecondStage(bufMeta)"
+       }
+      },
+      {
+       "id": "c5.p20b",
+       "text": "That stage follows indirect offsets, decompresses payloads when enabled, and reconstructs record timestamps.",
+       "code": {
+        "file": "executor/readvariable.go",
+        "start": 51,
+        "end": 77,
+        "anchor": "fp.ReadAt(buffer, offset)"
+       }
+      },
+      {
+       "id": "c5.p21",
+       "diagram": "d4-read-path",
+       "diagramFocus": [
+        "optional functions pipeline (materialized)",
+        "NumpyMultiDataset (columnar, msgpack)"
+       ],
+       "text": "Optional functions run on the materialised result, and the columns are packed into a NumpyMultiDataset for the client.",
+       "code": {
+        "file": "frontend/query.go",
+        "start": 215,
+        "end": 250,
+        "anchor": "s.aggRunner.Run(req.Functions, cs, tbkStr)"
+       },
+       "diagramComponents": [
+        "AG",
+        "C"
+       ]
+      },
+      {
+       "id": "c5.p22",
+       "text": "This log specifically means the planner found no matching files. Existing files with an empty time range are a different case; check the destination and catalog.",
+       "code": {
+        "file": "frontend/query.go",
+        "start": 336,
+        "end": 346,
+        "anchor": "no files returned from query parse"
+       }
+      }
+     ]
+    },
+    {
+     "id": "c5.i4",
+     "title": "W4 Checkpoint and WAL rotation",
+     "phrases": [
+      {
+       "id": "c5.p23",
+       "diagram": "d5-wal-states",
+       "diagramFocus": [
+        "CHECKPOINT: syncfs",
+        "TI CHECKPOINT COMMITCOMPLETE"
+       ],
+       "text": "Every five minutes the loop attempts a checkpoint. With pending committed groups, it writes a prepare marker, synchronizes primary files, and writes the completion marker.",
+       "code": {
+        "file": "executor/wal.go",
+        "start": 463,
+        "end": 487,
+        "anchor": "func (wf *WALFileType) CreateCheckpoint()"
+       },
+       "diagramComponents": [
+        "ck"
+       ]
+      },
+      {
+       "id": "c5.p24",
+       "diagram": "d3-write-path",
+       "diagramFocus": [
+        "every wal_rotate_interval timer events: truncate WAL"
+       ],
+       "text": "Rotation counts primary-refresh timer events, including empty or failed attempts. The default five gives roughly 25 minutes between truncations.",
+       "code": {
+        "file": "executor/wal.go",
+        "start": 748,
+        "end": 762,
+        "anchor": "Truncating WAL file..."
+       },
+       "diagramComponents": [
+        "WF"
+       ]
+      },
+      {
+       "id": "c5.p24a",
+       "text": "Truncation also follows a failed checkpoint, so it can drop logged groups whose primary-file writes were never synced. This is read from the code, not observed in a run.",
+       "code": {
+        "file": "executor/wal.go",
+        "start": 748,
+        "end": 762,
+        "anchor": "primaryFlushCounter++"
+       }
+      }
+     ]
+    },
+    {
+     "id": "c5.d8",
+     "title": "Schema: replication",
+     "phrases": [
+      {
+       "id": "t3.p10",
+       "diagram": "d8-replication",
+       "diagramComponents": [
+        "RCV",
+        "GS"
+       ],
+       "diagramFocus": [
+        "GetWALStream() at startup / retryable reconnect"
+       ],
+       "text": "A replica connects at startup and reconnects after retryable failures. The stream supplies live broadcasts, without an initial snapshot or catch-up cursor."
+      },
+      {
+       "id": "t3.p11",
+       "diagram": "d8-replication",
+       "diagramComponents": [
+        "MW",
+        "SND"
+       ],
+       "diagramFocus": [
+        "Send(TG bytes) after WAL fsync",
+        "SendReplicationMessage(TG)",
+        "stream.Send(TransactionGroup)",
+        "Bounded queues, 500 groups each"
+       ],
+       "text": "After WAL fsync, the master queues transaction groups for connected replicas. There is no remote-commit acknowledgement, but bounded queues can block the master behind a slow replica."
+      },
+      {
+       "id": "t3.p12",
+       "diagram": "d8-replication",
+       "diagramComponents": [
+        "RP",
+        "RW"
+       ],
+       "diagramFocus": [
+        "Replay(TG)",
+        "ParseTGData -> WTSet -> ColumnSeriesMap -> WriteCSM",
+        "HTTP Write uses injected ErrorWriter on replicas."
+       ],
+       "text": "Replica replay uses the default writer. HTTP Write uses ErrorWriter, but gRPC Write and SQL INSERT bypass it; Create and Destroy also lack that guard."
+      }
+     ]
+    },
+    {
+     "id": "c5.i5",
+     "title": "W5 Replication",
+     "phrases": [
+      {
+       "id": "c5.p25",
+       "diagram": "d8-replication",
+       "diagramFocus": [
+        "Master: FlushCommandsToWAL",
+        "Send(TG bytes) after WAL fsync"
+       ],
+       "text": "Scenario five is replication. After the WAL fsync, the master passes the transaction group to the replication sender.",
+       "code": {
+        "file": "executor/wal.go",
+        "start": 317,
+        "end": 320,
+        "anchor": "wf.ReplicationSender.Send(tgSerialized)"
+       },
+       "diagramComponents": [
+        "MW",
+        "SND"
+       ]
+      },
+      {
+       "id": "c5.p26",
+       "diagram": "d8-replication",
+       "diagramFocus": [
+        "SendReplicationMessage(TG)",
+        "stream.Send(TransactionGroup)"
+       ],
+       "text": "The replication server keeps one channel per connected replica and streams each group to it.",
+       "code": {
+        "file": "replication/grpc_server.go",
+        "start": 42,
+        "end": 85,
+        "anchor": "streamChannel := make(chan []byte"
+       },
+       "diagramComponents": [
+        "SND",
+        "GS"
+       ]
+      },
+      {
+       "id": "c5.p26a",
+       "text": "A new stream channel receives subsequent broadcasts. No initial history is loaded for that subscriber.",
+       "code": {
+        "file": "replication/grpc_server.go",
+        "start": 42,
+        "end": 85,
+        "anchor": "streamChannel := make(chan []byte"
+       }
+      },
+      {
+       "id": "c5.p26b",
+       "text": "Sender.Send queues locally; it does not wait for a replica to commit. But the queue is a bounded channel, so Send blocks while it is full.",
+       "code": {
+        "file": "replication/sender.go",
+        "start": 24,
+        "end": 49,
+        "anchor": "s.channel <- transactionGroup"
+       }
+      },
+      {
+       "id": "c5.p26c",
+       "text": "Each replica's stream channel is bounded too, and drains only as fast as the gRPC stream delivers to that replica. The fan-out loop serves replicas one after another and blocks on a full channel, holding up the others.",
+       "code": {
+        "file": "replication/grpc_server.go",
+        "start": 51,
+        "end": 85,
+        "anchor": "channel <- transactionGroup"
+       }
+      },
+      {
+       "id": "c5.p26d",
+       "text": "So one slow replica can fill its channel, then the sender's queue, and then the master's flush waits at Send, after the WAL fsync and before the primary-file writes. This is read from the code; it was not load-tested.",
+       "code": {
+        "file": "executor/wal.go",
+        "start": 313,
+        "end": 329,
+        "anchor": "wf.ReplicationSender.Send(tgSerialized)"
+       }
+      },
+      {
+       "id": "c5.p26e",
+       "text": "When a send to a replica fails, as after a disconnect, its handler closes that replica's channel. A later send by the fan-out on that closed channel panics; nothing recovers it, so the master process stops.",
+       "code": {
+        "file": "replication/grpc_server.go",
+        "start": 71,
+        "end": 84,
+        "anchor": "close(streamChannel)"
+       }
+      },
+      {
+       "id": "c5.p26f",
+       "text": "Handlers also change the map, with no lock, while the fan-out may be reading it; Go can abort that as a fatal error. This is read from the code; no race detector or crash test was run.",
+       "code": {
+        "file": "replication/grpc_server.go",
+        "start": 42,
+        "end": 85,
+        "anchor": "rs.StreamChannels[clientAddr] = streamChannel"
+       }
+      },
+      {
+       "id": "c5.p27",
+       "diagram": "d8-replication",
+       "diagramFocus": [
+        "Replay(TG)",
+        "ParseTGData -> WTSet -> ColumnSeriesMap -> WriteCSM",
+        "HTTP Write uses injected ErrorWriter on replicas."
+       ],
+       "text": "The receiver retries connection and non-EOF receive errors. EOF and replay errors are terminal.",
+       "code": {
+        "file": "replication/receiver.go",
+        "start": 34,
+        "end": 61,
+        "anchor": "ErrRetryable"
+       },
+       "diagramComponents": [
+        "RCV",
+        "RP",
+        "RW"
+       ]
+      },
+      {
+       "id": "c5.p27a",
+       "text": "Retryer invokes the receiver again after backoff for retryable errors.",
+       "code": {
+        "file": "replication/retry.go",
+        "start": 35,
+        "end": 58,
+        "anchor": "retryInterval(r.interval, r.backoffCoeff, cnt)"
+       }
+      }
+     ]
+    },
+    {
+     "id": "c5.i6",
+     "title": "W6 Plugins at work",
+     "phrases": [
+      {
+       "id": "c5.p28",
+       "diagram": "d9-plugins",
+       "diagramFocus": [
+        "BgWorker plugin",
+        "NewBgWorker(config) -> Run()"
+       ],
+       "text": "Scenario six is plugins. At start-up, RunBgWorkers loads each configured worker and runs it in its own goroutine.",
+       "code": {
+        "file": "cmd/start/plugins.go",
+        "start": 10,
+        "end": 27,
+        "anchor": "func RunBgWorkers"
+       },
+       "diagramComponents": [
+        "load",
+        "bg"
+       ]
+      },
+      {
+       "id": "c5.p29",
+       "diagram": "d9-plugins",
+       "diagramFocus": [
+        "TriggerPluginDispatcher",
+        "match 'on' pattern, fire in goroutine,",
+        "recover panics (written.go)"
+       ],
+       "text": "Normal flush dispatch matches written keys to trigger patterns and fires asynchronously with panic recovery. Derived data may lag the client response.",
+       "code": {
+        "file": "executor/written.go",
+        "start": 37,
+        "end": 77,
+        "anchor": "if tmatcher.Match(wr.key)"
+       },
+       "diagramComponents": [
+        "disp",
+        "trig"
+       ]
+      },
+      {
+       "id": "c5.p29a",
+       "text": "Crash-WAL replay writes fixed or variable primary data directly, without dispatching aggregation or streaming triggers.",
+       "code": {
+        "file": "executor/walreplay.go",
+        "start": 182,
+        "end": 208,
+        "anchor": "WriteBufferToFile(fp, wtSet.Buffer)"
+       },
+       "diagram": "d9-plugins",
+       "diagramComponents": [
+        "disp",
+        "w"
+       ]
+      },
+      {
+       "id": "c5.p29b",
+       "text": "Replicas differ: they apply shipped groups through the default writer's WriteCSM and a normal flush, so triggers configured on the replica run for those writes.",
+       "code": {
+        "file": "internal/di/replication.go",
+        "start": 142,
+        "end": 147,
+        "anchor": "c.GetDefaultWriter().WriteCSM"
+       }
+      },
+      {
+       "id": "c5.p30",
+       "text": "The planned debug session uses remote clients to write and query the scratch fixture, then inspects asynchronous aggregation and streaming.",
+       "action": {
+        "kind": "debug",
+        "where": "WSL server + IDEA",
+        "do": "Use the debug build, configuration and data fixture in c2.p11a: run marketstore-debug under Delve with the debug ondiskagg.so and stream.so in GOPATH/bin; remote write/query only. Check base and derived bars, stream latest-row semantics, logs and metrics; stop that scratch server afterwards, and rebuild the normal plugins before running ./marketstore again.",
+        "status": "needs-approval",
+        "why": "needs the debug build and a debugger set-up"
+       },
+       "pauseAfter": true
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "c6",
+   "title": "Other notes and open questions",
+   "items": [
+    {
+     "id": "c6.i1",
+     "title": "Design versus code",
+     "phrases": [
+      {
+       "id": "c6.p1",
+       "text": "Compared with the 2016 design, normal writes sync primary files at the background loop's periodic and shutdown checkpoints, when background sync is on, rather than per group, but each normal WAL group still receives a WAL fsync.",
+       "code": {
+        "file": "executor/wal.go",
+        "start": 280,
+        "end": 315,
+        "anchor": "wf.FilePtr.Sync()"
+       }
+      },
+      {
+       "id": "c6.p1a",
+       "text": "WAL bypass skips the log writes, and the flush marks a group as committed only on the logged path.",
+       "code": {
+        "file": "executor/wal.go",
+        "start": 280,
+        "end": 311,
+        "anchor": "wf.lastCommittedTGID = TGID"
+       }
+      },
+      {
+       "id": "c6.p1b",
+       "text": "So the checkpoint returns before its bypass sync, and nothing in this code forces bypassed data, such as local connect's, to disk. This is read from the code, not observed in a run.",
+       "code": {
+        "file": "executor/wal.go",
+        "start": 463,
+        "end": 471,
+        "anchor": "if wf.WALBypass {"
+       }
+      }
+     ]
+    },
+    {
+     "id": "c6.i2",
+     "title": "Open TODOs in the code",
+     "phrases": [
+      {
+       "id": "c6.p2",
+       "text": "The write API does not return a response for every request. There is a TODO for it.",
+       "code": {
+        "file": "frontend/write.go",
+        "start": 47,
+        "end": 48,
+        "anchor": "There should be an error response for every server request"
+       }
+      },
+      {
+       "id": "c6.p3",
+       "text": "If writing a year file fails after the WAL commit, the error is only logged. The TODO asks what should happen then.",
+       "code": {
+        "file": "executor/wal.go",
+        "start": 326,
+        "end": 332,
+        "anchor": "what should we do if the write commit partially failed"
+       }
+      },
+      {
+       "id": "c6.p4",
+       "text": "The reader builds the whole result in memory. A very long range can run out of memory, and the TODO proposes splitting the query.",
+       "code": {
+        "file": "executor/scanner.go",
+        "start": 181,
+        "end": 188,
+        "anchor": "probably cause out of memory"
+       }
+      },
+      {
+       "id": "c6.p5",
+       "text": "If the check that the WAL is writable fails, the server panics.",
+       "code": {
+        "file": "executor/wal.go",
+        "start": 241,
+        "end": 246,
+        "anchor": "Failed attempt to write to WAL"
+       }
+      }
+     ]
+    },
+    {
+     "id": "c6.i3",
+     "title": "Operational limits",
+     "phrases": [
+      {
+       "id": "c6.p6",
+       "text": "The receiver reconnects after retryable errors; EOF and replay errors stop it. Replica write restrictions have the transport gaps already shown.",
+       "code": {
+        "file": "replication/receiver.go",
+        "start": 34,
+        "end": 61,
+        "anchor": "ErrRetryable"
+       }
+      },
+      {
+       "id": "c6.p6a",
+       "text": "Deletes are not replicated. Bootstrap, disconnection gaps and replica validation need an explicit operational procedure.",
+       "code": {
+        "file": "replication/doc.go",
+        "start": 13,
+        "end": 13,
+        "anchor": "Currently Delete API is not supported"
+       }
+      },
+      {
+       "id": "c6.p7",
+       "text": "Plugin loading is tested here only on Linux; the test skips every other system. WSL is one Linux option.",
+       "code": {
+        "file": "plugins/load_test.go",
+        "start": 16,
+        "end": 23,
+        "anchor": "Only linux runs plugins"
+       }
+      }
+     ]
+    },
+    {
+     "id": "c6.i4",
+     "title": "Open questions",
+     "phrases": [
+      {
+       "id": "c6.p8",
+       "text": "Open questions: how should variable-record replay duplicates be tested and handled? How will replica bootstrap and gap repair be verified? Which trust boundary protects the data APIs?"
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "version": 1
+}

@@ -1,0 +1,46 @@
+@startuml d8-routing-failover
+title Choosing the node for a key, and failover (drawn from the 2.17.0 code)
+participant "TcpClientCache" as tcc
+participant "ReliableChannel" as rc
+participant "ClientCacheAffinityContext" as aff
+participant "Channel of the\nkey's primary node" as nch
+participant "Fallback channel\n(see the note)" as dch
+participant "ClientRetryPolicy\n(default: retry all)" as pol
+participant "Server node" as srv
+tcc -> rc : affinityService(cacheId, key, ...)
+rc -> aff : affinityUpdateRequired(cacheId)?
+alt no current mapping for the cache (missing, or older than the last topology)
+  alt a last topology is known
+    rc -> srv : CACHE_PARTITIONS 1101\n(one thread at a time; others go without the map)
+    srv --> rc : per node: primary partitions;\nonly PARTITIONED + rendezvous caches
+    rc -> aff : readPartitionsUpdateResponse
+  else no last topology yet
+    rc -> rc : nothing fetched;\nthe call goes without the map
+  end
+end
+rc -> aff : affinityNode(cacheId, key)
+aff --> rc : binary key -> partition ->\nprimary node id (or none)
+rc -> nch : service via nodeChannels[node id]
+alt connection error on the node channel (synchronous call)
+  rc -> rc : onChannelFailure: close channel,\nfail listeners, roll the default
+  alt one attempt is the limit
+    rc -> tcc : throw the failure\n(the policy is not asked)
+  else more attempts allowed
+    rc -> pol : shouldRetry? (system ops: always)
+    rc -> dch : applyOnDefaultChannel\n(only if the policy agrees)
+    loop until success, attempts used up, or the policy says no
+      dch --> rc : ClientConnectionException
+      rc -> rc : onChannelFailure, next holder;\nno channel open and failures = attempts\n(the extra attempt not counted):\nreset discovery, channelsInit
+      rc -> pol : shouldRetry?
+    end
+    rc -> tcc : throw the first failure,\nthe others suppressed
+  end
+end
+note over dch
+  first try: a random open channel if partition awareness is on, more than
+  one channel is open and nothing has failed yet; otherwise the current default
+  holder, which moves on when it fails.
+  attempts = holders, or retryLimit if smaller and above 0;
+  one more with partition awareness and more than one open channel
+end note
+@enduml

@@ -1,0 +1,30 @@
+@startuml d5-server-modules
+title Thin client, server side (drawn from the 2.17.0 code)
+skinparam componentStyle rectangle
+component "ClientListenerProcessor\nbinds the first free port 10800..10900" as proc
+component "GridNioServer client-listener\nselector threads" as nio
+component "GridNioSslFilter\n(only if sslEnabled)" as ssl
+component "GridNioCodecFilter +\nClientListenerNioMessageParser\nlength framing, first-message check" as codec
+component "GridNioAsyncNotifyFilter" as notify
+component "client-connector pool\nunbounded queue" as pool
+component "ClientListenerNioListener\nhandshake, decode, respond" as lsnr
+component "ClientConnectionContext\nversion, features, security,\nresources, transactions" as cctx
+component "ClientMessageParser\nop code to request class" as mparser
+component "ClientRequestHandler\nprocess or processAsync" as handler
+component "Request classes\ne.g. ClientCachePutRequest" as reqs
+component "IgniteCache\n(keep binary for key requests)" as cache
+component "ClientResponse\nheader + payload" as resp
+proc --> nio
+nio --> ssl : bytes
+ssl --> codec
+codec --> notify : ClientMessage
+notify --> pool
+pool --> lsnr
+lsnr --> cctx
+lsnr --> mparser
+lsnr --> handler
+handler --> reqs
+reqs --> cache
+reqs --> resp
+resp --> nio : encode, session send
+@enduml

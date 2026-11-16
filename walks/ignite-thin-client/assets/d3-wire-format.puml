@@ -1,0 +1,46 @@
+@startuml d3-wire-format
+title Thin client protocol frames (drawn from the 2.17.0 code; all numbers little-endian)
+class "Handshake request" as hreq {
+  {field} int32 length (not counting itself)
+  {field} byte 1 = handshake
+  {field} int16 major, minor, patch
+  {field} byte 2 = thin client
+  {field} feature bitmask (1.7.0+)
+  {field} user attributes map (1.7.0+)
+  {field} user name, password (1.1.0+, only if set)
+}
+class "Handshake response" as hresp {
+  {field} int32 length
+  {field} bool success
+  {field} if success: feature bitmask (1.7.0+)
+  {field} if success: server node id (1.4.0+)
+  {field} if failed: server version or 0.0.0, message
+  {field} if failed: int32 status (1.1.0+)
+}
+class "Request" as req {
+  {field} int32 length
+  {field} int16 operation code
+  {field} int64 request id
+  {field} payload
+}
+class "Cache key payload" as cpay {
+  {field} int32 cache id = hash code of the name
+  {field} byte flags: 1 keep binary, 2 transaction, 4 expiry
+  {field} 3 x int64 expiry durations (flag 4)
+  {field} int32 transaction id (flag 2)
+  {field} key, then value for a put
+}
+class "Response" as resp {
+  {field} int32 length
+  {field} int64 request id (resource id for a notification)
+  {field} int16 flags (1.4.0+): 1 error, 2 topology changed, 4 notification
+  {field} int64 + int32 topology version (flag 2)
+  {field} int16 notification code (flag 4)
+  {field} int32 status (flag 1; always before 1.4.0)
+  {field} error message (when status is not 0)
+  {field} payload
+}
+hreq ..> hresp : first exchange
+req ..> resp : matched by request id
+req *-- cpay
+@enduml

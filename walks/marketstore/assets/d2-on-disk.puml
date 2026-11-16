@@ -1,0 +1,37 @@
+@startuml d2-on-disk
+title D2 - On-disk layout and version-2 year files
+skinparam monochrome false
+package "data/  (root_directory)\ncategory_name: Symbol" as data {
+  folder "AAPL\ncategory_name: Timeframe" as sym {
+    folder "1Min\ncategory_name: AttributeGroup" as tf {
+      folder "OHLCV\ncategory_name: Year" as ag {
+        file "2017.bin" as f2017
+        file "2018.bin" as f2018
+      }
+    }
+  }
+  file "WALFile.<nanosecond-timestamp>.walfile" as wal
+}
+rectangle "Year file layout" as layout {
+  rectangle "Header: 37024 bytes, format version 2\nversion, description, year, timeframe (nanoseconds),\nrecord type (fixed | variable), nfields, record length,\nelement names [1024][32]byte, element types [1024]byte" as hdr
+  rectangle "Fixed record for interval 1: index int64 | Open | High | Low | Close | Volume\nslot length = header record length: 8 + column bytes rounded up to the machine word;\nthe writer appends no pad bytes, so any rounding gap stays unwritten" as r1
+  rectangle "... (sparse slots; index 0 is skipped; allocation is block-granular)" as holes
+  rectangle "Fixed record for interval N" as rn
+  rectangle "Variable slot: index int64 | offset int64 | length int64 (24 bytes)" as vr
+  rectangle "Variable payload tail: multiple events per interval\nmerge old + new, timestamp sort, optional Snappy\nstored event: data columns + uint32 interval ticks\n(Epoch and Nanoseconds are not stored)" as vp
+}
+rectangle "Query result row (rebuilt, not stored)\nEpoch seconds (8 bytes) | data columns | Nanoseconds (4 bytes)" as api
+f2017 --> hdr
+hdr -[hidden]-> r1
+r1 -[hidden]-> holes
+holes -[hidden]-> rn
+vr --> vp : indirect payload location
+vp --> api : second-stage read
+note right of layout
+  offset = header + (index - 1) * record length
+  intraday index = 1 + (time - Jan 1 00:00) / timeframe
+  daily index = YearDay() - 1 (Jan 1 -> 0: its slot falls inside the header; reads never return it)
+  Fixed writes overwrite slots; variable writes merge payloads.
+  (utils/io/timeindex.go; executor/writer.go, rewritebuffer.go)
+end note
+@enduml

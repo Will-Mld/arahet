@@ -1,0 +1,24 @@
+@startuml
+title Stop, discuss, amend, continue
+skinparam shadowing false
+skinparam defaultFontSize 13
+[*] --> Play
+state "Play\nvoice, code, schema" as Play
+state "Question\nanswered at this place" as Ask
+state "Stop and discuss\nyour note goes to the session" as Stop
+state "Amend\nthe next version of the walk;\nnothing is overwritten" as Amend
+state "Validate\nevery pointer and schema name" as Validate
+state "Reload\nyour place is mapped\nonto the new version" as Reload
+state "Creation prompt\nhow a new walk begins" as Prompt
+state "Agent writes the walk" as Write
+Prompt --> Write
+Write --> Validate
+Play --> Ask
+Ask --> Play
+Play --> Stop
+Stop --> Amend
+Amend --> Validate
+Validate --> Reload
+Validate --> Play : first time
+Reload --> Play : continue where you were
+@enduml

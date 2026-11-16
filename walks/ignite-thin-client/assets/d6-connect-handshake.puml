@@ -1,0 +1,36 @@
+@startuml d6-connect-handshake
+title Connect and handshake (drawn from the 2.17.0 code)
+actor "Application" as app
+participant "TcpIgniteClient" as tic
+participant "ReliableChannel" as rc
+participant "ClientDiscoveryContext" as disco
+participant "ClientChannelHolder" as hold
+participant "TcpClientChannel" as tch
+participant "ClientListenerNioListener\n(server)" as srvl
+participant "ClientConnectionContext\n(server)" as cctx
+app -> tic : Ignition.startClient(cfg)
+tic -> rc : new ReliableChannel\n(starts the client NIO server)
+tic -> rc : channelsInit()
+rc -> disco : getEndpoints():\nconfigured addresses;\nno port = 10800..10900
+rc -> rc : default holder: random among\nholders with the lowest port
+rc -> hold : getOrCreateChannel()
+hold -> tch : new TcpClientChannel
+tch -> tch : open socket (connect timeout =\nclient timeout), SSL handshake if on
+note over srvl : onConnected: handshake timer\n(10 s by default)
+tch -> srvl : handshake: version 1.7.0, type 2,\nfeatures, attributes, credentials
+srvl -> cctx : prepareContext, permissions,\nversion check
+cctx -> cctx : initializeFromHandshake:\nkeep known features, authenticate
+alt accepted
+  srvl --> tch : true, features, node id
+else refused
+  srvl --> tch : false, server version or 0.0.0,\nmessage, status
+  tch -> srvl : retry with the server version\n(if the client supports it)
+end
+tch -> srvl : GET_IDLE_TIMEOUT\n(only if heartbeats on and negotiated)
+hold -> rc : add topology listener;\nnodeChannels[node id] = holder
+rc -> rc : initAllChannelsAsync()\n(partition awareness on)
+tic -> rc : GET_BINARY_CONFIGURATION\n(auto binary configuration + feature)
+srvl --> tch : first response on the connection\n(heartbeats off): flag 2 + topology version
+tch -> rc : topology listener: onTopologyChanged
+rc -> disco : refresh endpoints; channelsInit\n(in the background)
+@enduml

@@ -1,0 +1,29 @@
+@startuml
+title The player page
+skinparam shadowing false
+skinparam defaultFontSize 13
+skinparam rectangle {
+  BackgroundColor #F7F9FC
+}
+rectangle "Player page (in your browser)" as page {
+  rectangle "Contents panel  (T)\nchapters, topics, phrases;\nclick to jump" as toc
+  rectangle "Header\nwalk, chapter, topic" as head
+  rectangle "Caption\nthe phrase being spoken" as cap
+  rectangle "Code card\nthe lines of this phrase" as code
+  rectangle "Schema card\nnamed parts framed;\nZ zoom, X full size" as schema
+  rectangle "Controls\nSpace play/pause, arrows phrase,\n[ ] topic, Shift+arrows chapter,\nspeed, voice" as ctl
+  rectangle "Question box  (Q)\ntype, or hold to speak" as ask
+  rectangle "Who answers\nhelper, session, or nobody" as who
+  rectangle "Stop & discuss  (D)\na note for the session" as disc
+}
+rectangle "IntelliJ IDEA (optional)\nopens the file at the line" as ide
+toc -[hidden]right- head
+head -[hidden]down- cap
+cap -[hidden]down- code
+code -[hidden]right- schema
+code -[hidden]down- ctl
+ctl -[hidden]right- ask
+ask -[hidden]right- who
+ctl -[hidden]down- disc
+code ..> ide : follows
+@enduml

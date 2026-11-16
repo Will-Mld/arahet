@@ -1,0 +1,29 @@
+@startuml
+title The pieces
+skinparam shadowing false
+skinparam defaultFontSize 13
+rectangle "codewalk.py - one process, Python standard library" as server {
+  rectangle "Player\nstate, bookmark, versions" as playerc
+  rectangle "HTTP API and event stream\n/api/cmd, /api/events, /api/wait" as api
+  rectangle "Script tools\nload, validate, outline, amend" as tools
+  rectangle "Speech\ntext to speech (cached),\nspeech to text" as speech
+  rectangle "IDE bridge\nlauncher, safe follow" as idebridge
+  rectangle "Answer helper\nheadless Claude call" as helper
+}
+rectangle "page.html\nthe player page" as page
+rectangle "mcp_server.py\nMCP tools for a session" as mcp
+rectangle "codewalk.py ctl\ncommand line" as ctl
+rectangle "bootstrap.py\nsetup and start" as bootstrap
+rectangle "walks/\nscripts, schemas, change logs" as walks
+rectangle "cache/ and runs/\naudio clips, positions, traces" as files
+page --> api
+mcp --> api
+ctl --> api
+api --> playerc
+playerc --> speech
+playerc --> idebridge
+playerc --> helper
+tools --> walks
+playerc --> files
+bootstrap ..> server : starts
+@enduml

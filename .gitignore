@@ -1,0 +1,8 @@
+# made by bootstrap.py and the player; not part of the repository
+demo/
+cache/
+runs/
+__pycache__/
+*.pyc
+*.tmp
+*.rejected.json

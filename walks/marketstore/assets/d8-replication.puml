@@ -1,0 +1,38 @@
+@startuml d8-replication
+title D8 - Asynchronous live WAL shipping; bootstrap is separate
+participant "Master: FlushCommandsToWAL\n(wal.go:317)" as MW
+participant "replication.Sender" as SND
+participant "GRPCReplicationServer\nGetWALStream (grpc_server.go:42)" as GS
+participant "Replica: Receiver.Run\n(receiver.go:34)" as RCV
+participant "ReplayerImpl.Replay\n(replay.go:38)" as RP
+participant "Replica writer\n(default writer)" as RW
+RCV -> GS : GetWALStream() at startup / retryable reconnect
+note over GS,RCV
+  New subscriber channel: subsequent broadcasts only.
+  No initial snapshot, historical cursor or remote-commit ACK.
+  EOF and replay errors stop; other receive/connect errors retry.
+end note
+MW -> SND : Send(TG bytes) after WAL fsync
+note over SND
+  Send queues locally; no remote commit wait.
+  Bounded queues, 500 groups each: the sender queue (sender.go:11)
+  and each replica stream channel (grpc_server.go:15).
+  A full replica channel blocks the fan-out (grpc_server.go:83),
+  then Send, then the master flush.
+  The channel map has no lock (grpc_server.go:52, 72, 81).
+  A failed stream closes its channel (grpc_server.go:73) while the
+  fan-out may be sending on it: the send panics, the master stops.
+  Read from the code; no race detector or crash test was run.
+end note
+SND -> GS : SendReplicationMessage(TG)
+GS -> RCV : stream.Send(TransactionGroup)
+RCV -> RP : Replay(TG)
+RP -> RW : ParseTGData -> WTSet -> ColumnSeriesMap -> WriteCSM
+note over RW
+  HTTP Write uses injected ErrorWriter on replicas.
+  gRPC Write bypasses it via global executor.WriteCSM.
+  SQL INSERT INTO via Query (HTTP or gRPC) does too.
+  Create/Destroy mutate the catalog without this guard.
+  Deletes are not replicated; bootstrap/gap repair is external.
+end note
+@enduml

@@ -1,0 +1,239 @@
+{
+ "schema": "codewalk-script-v1",
+ "id": "codewalk-guide",
+ "version": 1,
+ "title": "codewalk: an interactive guide to the player",
+ "project": {
+  "name": "codewalk",
+  "root": "../.."
+ },
+ "operator": {
+  "task": "Show a first-time listener the player page and let them try each control.",
+  "guidance": "Short phrases; after each try-it phrase the walk waits (pauseAfter) until the listener presses Space.",
+  "audience": "a first-time listener"
+ },
+ "author": "Claude Code (claude-opus-5-5) for the author, 2026-11-14",
+ "diagrams": {
+  "g1-page": {
+   "title": "The player page",
+   "source": "assets/g1-page.puml",
+   "svg": "assets/svg/g1-page.svg"
+  },
+  "g2-loop": {
+   "title": "Stop, discuss, amend, continue",
+   "source": "assets/g2-loop.puml",
+   "svg": "assets/svg/g2-loop.svg"
+  }
+ },
+ "defaults": {
+  "gapMs": 700
+ },
+ "chapters": [
+  {
+   "id": "g1",
+   "title": "The page",
+   "items": [
+    {
+     "id": "g1.i1",
+     "title": "What you see",
+     "phrases": [
+      {
+       "id": "g.p1",
+       "text": "Welcome to codewalk. This short guide shows you the page you are looking at, and asks you to try each control. After each try it waits for you.",
+       "diagram": "g1-page",
+       "diagramComponents": [
+        "page"
+       ]
+      },
+      {
+       "id": "g.p2",
+       "text": "At the top is the caption: the phrase you are hearing now.",
+       "diagram": "g1-page",
+       "diagramComponents": [
+        "cap",
+        "head"
+       ]
+      },
+      {
+       "id": "g.p3",
+       "text": "This is the schema card. The parts of a schema that a phrase names are framed, like the ones on this page plan.",
+       "diagram": "g1-page",
+       "diagramComponents": [
+        "schema"
+       ]
+      },
+      {
+       "id": "g.p4",
+       "text": "When a phrase points at code, the code card shows those lines. If the walk was started with dash dash ide and IntelliJ IDEA is open, it follows the code.",
+       "diagram": "g1-page",
+       "diagramComponents": [
+        "code",
+        "ide"
+       ]
+      },
+      {
+       "id": "g.p5",
+       "text": "On the left, or in a drawer on a narrow window, is the contents panel. Press T to open or close it. The walk now waits: try T, then press Space to go on.",
+       "diagram": "g1-page",
+       "diagramComponents": [
+        "toc"
+       ],
+       "pauseAfter": true
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "g2",
+   "title": "Moving around",
+   "items": [
+    {
+     "id": "g2.i1",
+     "title": "Keys",
+     "phrases": [
+      {
+       "id": "g.p6",
+       "text": "Space plays and pauses. The left and right arrows go one phrase back or forward.",
+       "diagram": "g1-page",
+       "diagramComponents": [
+        "ctl"
+       ]
+      },
+      {
+       "id": "g.p7",
+       "text": "The square brackets go one topic back or forward; with Shift, the arrows go one chapter.",
+       "diagram": "g1-page",
+       "diagramComponents": [
+        "ctl"
+       ]
+      },
+      {
+       "id": "g.p8",
+       "text": "Try it: press the left arrow. You hear the last phrase again, then this one, and the walk waits here. Then press Space.",
+       "diagram": "g1-page",
+       "diagramComponents": [
+        "ctl"
+       ],
+       "pauseAfter": true
+      },
+      {
+       "id": "g.p9",
+       "text": "In the contents panel, a click on any phrase jumps to it. The panel also shows where you are.",
+       "diagram": "g1-page",
+       "diagramComponents": [
+        "toc"
+       ]
+      },
+      {
+       "id": "g.p10",
+       "text": "Z zooms the schema to the framed parts, and X opens it full size; Escape closes it. Try Z now, then press Space.",
+       "diagram": "g1-page",
+       "diagramComponents": [
+        "schema"
+       ],
+       "pauseAfter": true
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "g3",
+   "title": "Asking",
+   "items": [
+    {
+     "id": "g3.i1",
+     "title": "Questions",
+     "phrases": [
+      {
+       "id": "g.p11",
+       "text": "Press Q to type a question about what you just heard. The walk pauses, and the answer is spoken and shown.",
+       "diagram": "g1-page",
+       "diagramComponents": [
+        "ask"
+       ]
+      },
+      {
+       "id": "g.p12",
+       "text": "The page shows who will answer: a short Claude call if the Claude command-line tool is installed, a coding session that is listening, or nobody.",
+       "diagram": "g1-page",
+       "diagramComponents": [
+        "who"
+       ]
+      },
+      {
+       "id": "g.p13",
+       "text": "To speak instead of typing, hold the microphone button. Ask something now, or press Space to go on.",
+       "diagram": "g1-page",
+       "diagramComponents": [
+        "ask"
+       ],
+       "pauseAfter": true
+      },
+      {
+       "id": "g.p14",
+       "text": "An answer can be stopped at any time with Space, Escape, or the Stop answer button, which replaces Play during an answer. The walk then returns to where it was.",
+       "diagram": "g1-page",
+       "diagramComponents": [
+        "ask",
+        "ctl"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "g4",
+   "title": "Stop, discuss, amend, continue",
+   "items": [
+    {
+     "id": "g4.i1",
+     "title": "When something is wrong",
+     "phrases": [
+      {
+       "id": "g.p15",
+       "text": "When something is wrong or unclear, press D. Write or say a note; the walk stops and keeps your place.",
+       "diagram": "g2-loop",
+       "diagramComponents": [
+        "Play",
+        "Stop"
+       ]
+      },
+      {
+       "id": "g.p16",
+       "text": "A coding session that listens gets your note at once. You agree a change, and the session amends the walk into a new version. Nothing is overwritten.",
+       "diagram": "g2-loop",
+       "diagramComponents": [
+        "Amend"
+       ]
+      },
+      {
+       "id": "g.p17",
+       "text": "The new version is checked, loaded, and your place is mapped onto it. The walk continues where you stopped; changed phrases are played again.",
+       "diagram": "g2-loop",
+       "diagramComponents": [
+        "Validate",
+        "Reload"
+       ]
+      },
+      {
+       "id": "g.p18",
+       "text": "New walks begin with a creation prompt. This repository has one in prompts, create walk. Give it to your coding agent together with the project you want explained.",
+       "diagram": "g2-loop",
+       "diagramComponents": [
+        "Prompt",
+        "Write"
+       ]
+      },
+      {
+       "id": "g.p19",
+       "text": "That is the guide. To watch a real walk in view mode, run bootstrap dot py run demo; for the design of codewalk itself, run design."
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

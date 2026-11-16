@@ -1,0 +1,24 @@
+@startuml
+title Stop, discuss, amend, continue
+skinparam shadowing false
+skinparam defaultFontSize 13
+participant "Listener" as L
+participant "Page" as G
+participant "Player" as P
+participant "Session\n(coding agent)" as S
+participant "Walk files" as F
+L -> G : D + note
+G -> P : discuss
+P -> P : bookmark: walk, version,\nphrase, audio offset
+P -> S : inbox record\n(ctl wait / MCP returns)
+L <-> S : talk it over
+S -> F : patch
+S -> F : amend: next version\n+ change log line
+S -> P : reload
+P -> F : load, validate
+P -> P : map the bookmark\n(rules a-e)
+P -> G : reloaded: changed,\ninserted, deleted
+L -> G : Continue
+G -> P : play
+P -> G : corrections first,\nthen the listener's place
+@enduml

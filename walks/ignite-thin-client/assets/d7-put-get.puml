@@ -1,0 +1,39 @@
+@startuml d7-put-get
+title Cache put and get, end to end (drawn from the 2.17.0 code)
+actor "Application" as app
+participant "TcpClientCache" as tcc
+participant "ReliableChannel" as rc
+participant "TcpClientChannel" as tch
+participant "ClientListenerNioListener\n(client-connector thread)" as srvl
+participant "ClientMessageParser" as mp
+participant "ClientRequestHandler" as hnd
+participant "ClientCachePutRequest /\nClientCacheGetRequest" as req
+participant "IgniteCache\n(keep binary)" as cache
+app -> tcc : put(key, val)
+tcc -> rc : affinityService(cacheId, key,\nCACHE_PUT 1001)
+rc -> rc : choose channel: the key's node,\nor one the reliable channel picks
+rc -> tch : service(op, writer, reader)
+tch -> tch : send: next request id,\npendingReqs.put(id, future)
+tch -> srvl : length, op code, request id,\ncache id, flags, key, value
+srvl -> mp : decode(msg)
+mp --> srvl : ClientCachePutRequest
+srvl -> hnd : handle(req) in the security context
+hnd -> req : process (atomic cache) or\nprocessAsync (transactional cache)
+req -> cache : put(key, val)
+req --> hnd : ClientResponse(request id)
+hnd --> srvl : response
+srvl --> tch : request id, flags\n[topology version] [status, message]
+tch -> tch : processNextMessage: match id,\ncomplete the future (selector thread)
+tch --> tcc : null for a put
+== get ==
+app -> tcc : get(key)
+tcc -> rc : affinityService(cacheId, key,\nCACHE_GET 1000)
+rc -> tch : service(...)
+tch -> srvl : request id, cache id, flags, key
+srvl -> req : decode and handle as above:\nClientCacheGetRequest.process
+req -> cache : get(key)
+req --> srvl : ClientObjectResponse: header + value
+srvl --> tch : request id, flags,\n[topology version], value
+tch --> tcc : value read by the marshaller\n(binary if keep binary)
+tcc --> app : value, or null if absent
+@enduml

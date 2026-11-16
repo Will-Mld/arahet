@@ -1,0 +1,24 @@
+@startuml d6-startup
+title D6 - Server start-up: marketstore start --config mkts.yml (cmd/start/main.go:61)
+participant "main\n(marketstore.go)" as M
+participant "cmd.Execute\n(cobra)" as X
+participant "executeStart" as S
+participant "di.Container" as D
+participant "WAL + WALCleaner" as W
+participant "HTTP / gRPC servers" as H
+participant "bgworker plugins" as B
+M -> X : Execute()
+X -> S : start subcommand
+S -> S : read + ParseConfig(mkts.yml)
+S -> D : NewContainer(config)
+S -> D : GetReplicationSender().Run, trigger dispatcher
+S -> D : GetCatalogDir() (scan data dir), GetInitWALFile()
+D -> W : NewWALFile; unless bypassed: find old WAL files,\nCleanupOldWALFiles -> Replay;\nif background_sync: go SyncWAL
+S -> S : NewInstanceSetup, disk usage monitor, "startup time"
+S -> D : replication client (replica only)
+S -> H : register gRPC service, /rpc, /ws, /metrics
+S -> B : RunBgWorkers(config.BgWorkers)
+S -> S : Queryable = 1 (readiness, not Query admission)
+S -> H : gRPC listen; signal handler (SIGUSR1 stacks, SIGINT/TERM graceful)
+S -> H : http.ListenAndServe(listen_port)
+@enduml

@@ -1,0 +1,31 @@
+@startuml d9-plugins
+title D9 - Configured Go plugins; asynchronous derived-data feedback
+rectangle "mkts.yml\n(default plugin examples are commented)" as cfg
+rectangle "plugins.Load(name)\nplugin.Open from GOPATH/bin or ./\n(plugins/load.go:44)" as load
+rectangle "Trigger plugin\nNewTrigger(config) -> Fire(keyPath, records)\ne.g. ondiskagg: 1Min -> 5Min/1H/1D bars" as trig
+rectangle "BgWorker plugin\nNewBgWorker(config) -> Run()\ne.g. alpacabkfeeder, polygon, iex" as bg
+rectangle "TriggerPluginDispatcher\nmatch 'on' pattern, fire in goroutine,\nrecover panics (written.go)" as disp
+rectangle "Writer.WriteCSM" as w
+rectangle "QueryService.ExecuteQuery\nplanner + Reader (base data)" as q
+cfg --> load : triggers: module/on/config\nbgworkers: module/name/config
+load --> trig
+load --> bg
+w --> disp : normal flush records; may include primary-write errors
+disp --> trig : Fire asynchronously
+bg --> w : write fetched market data
+trig --> q : ondiskagg reads base bars
+trig --> w : ondiskagg writes derived bars
+note bottom of disp
+  Select base-data patterns to avoid unwanted feedback.
+  Derived updates may lag Write responses.
+  Crash-WAL replay writes primary data directly:
+  aggregation/stream triggers are not rerun.
+  Replica apply uses WriteCSM: replica triggers run.
+end note
+note bottom of load
+  Go plugin.Open; plugins built with -buildmode=plugin.
+  Load test runs only on Linux (plugins/load_test.go).
+  contrib READMEs name Linux and macOS.
+  WSL is one Linux option.
+end note
+@enduml

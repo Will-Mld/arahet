@@ -1,0 +1,2421 @@
+{
+ "schema": "codewalk-script-v1",
+ "schemaExtensions": {
+  "diagram": "phrase field: id of a diagram in 'diagrams' (PlantUML source + rendered SVG); diagramFocus lists texts to highlight, diagramComponents the named parts to frame",
+  "action": "phrase field: something to run, debug or capture at this point; status 'planned' or 'needs-approval'. The player does not run actions."
+ },
+ "id": "ignite-2.17.0-thin-client",
+ "title": "Apache Ignite 2.17.0: the thin client, from the API to the cache and back",
+ "project": {
+  "name": "ignite-2.17.0",
+  "root": "../../demo/ignite-2.17.0",
+  "obtain": "python3 bootstrap.py demo ignite (pinned commit d53d4540b64bb4a25f1a5a1003c4338727628c9f, verified Git checkout or GitHub archive)",
+  "version": "2.17.0",
+  "commit": "d53d4540b64bb4a25f1a5a1003c4338727628c9f",
+  "licence": "Apache-2.0"
+ },
+ "operator": {
+  "task": "Write a codewalk walk for the project at demo/ignite-2.17.0 (Apache Ignite 2.17.0, commit d53d4540b64bb4a25f1a5a1003c4338727628c9f), using this codewalk repository, following prompts/accuracy-addendum.md. Purpose and audience: an engineer new to Apache Ignite who must understand the thin client well enough to debug a problem in it: how a thin client connects, how a request travels from the client API to a cache on a server node and back, and where to look when it fails; first a short top-level overview of Ignite as a whole, so they know where the thin client sits.",
+  "guidance": "Plan, one chapter per part: 1 Overview: what Ignite is and does from the business point of view, its main parts at the top level (cluster nodes, discovery, communication, caches, SQL, compute, persistence) and the ways to connect (server and thick-client nodes, the thin client, JDBC/ODBC, REST); where the thin client sits. 2 Preparations: version 2.17.0 and its commit, how it is built (read the build files; do not build), the top-level structure and where the thin-client code lives (client side and server side), the configuration on both sides. 3 Main design ideas of the thin client: requirements and assumptions supported with code and schemas (binary protocol over TCP, handshake and protocol versions/features, request ids and asynchronous responses, partition awareness, failover and reconnect, authentication and SSL, what is not supported compared with a thick client); verify each in the code; drop or qualify what the code does not show. 4 Modules: client side and server side, each with its main parts and a schema. 5 Top-level workflows, each with a schema, the call hierarchy, breakpoints and logs: (a) connect and handshake; (b) a cache put and get end to end; (c) partition awareness or failover, whichever the code supports more clearly. 6 Other notes and open questions. Depth and length: about 20 minutes of listening (about 135 words a minute, 0.7 s gap between phrases: 2,400-2,600 words in 130-160 phrases); the overview stays short, the thin client gets the depth. Phrases: one or two spoken sentences, plain spoken English, initialisms explained at first use, a code pointer for every statement about the code. Schemas in PlantUML with aliases, rendered to SVG, each saying it is drawn from the 2.17.0 code. Builds, runs, tests, debugging and logs are planned or needs-approval actions that must work as written; nothing is run. Claims ledger first (ignite-thin-client.claims.md), cross-check and the list of what was not verified at its end.",
+  "audience": "an engineer new to Apache Ignite who must debug a problem in the thin client"
+ },
+ "author": "Claude Code (claude-opus-5-5), written by reading the Apache Ignite 2.17.0 source on 2026-11-16; claims ledger in ignite-thin-client.claims.md",
+ "diagrams": {
+  "d1-ignite-overview": {
+   "title": "Apache Ignite at the top level",
+   "source": "assets/d1-ignite-overview.puml",
+   "svg": "assets/svg/d1-ignite-overview.svg"
+  },
+  "d2-source-layout": {
+   "title": "Where the thin-client code lives",
+   "source": "assets/d2-source-layout.puml",
+   "svg": "assets/svg/d2-source-layout.svg"
+  },
+  "d3-wire-format": {
+   "title": "Thin client protocol frames",
+   "source": "assets/d3-wire-format.puml",
+   "svg": "assets/svg/d3-wire-format.svg"
+  },
+  "d4-client-modules": {
+   "title": "Thin client, client side",
+   "source": "assets/d4-client-modules.puml",
+   "svg": "assets/svg/d4-client-modules.svg"
+  },
+  "d5-server-modules": {
+   "title": "Thin client, server side",
+   "source": "assets/d5-server-modules.puml",
+   "svg": "assets/svg/d5-server-modules.svg"
+  },
+  "d6-connect-handshake": {
+   "title": "Connect and handshake",
+   "source": "assets/d6-connect-handshake.puml",
+   "svg": "assets/svg/d6-connect-handshake.svg"
+  },
+  "d7-put-get": {
+   "title": "Cache put and get, end to end",
+   "source": "assets/d7-put-get.puml",
+   "svg": "assets/svg/d7-put-get.svg"
+  },
+  "d8-routing-failover": {
+   "title": "Choosing the node for a key, and failover",
+   "source": "assets/d8-routing-failover.puml",
+   "svg": "assets/svg/d8-routing-failover.svg"
+  }
+ },
+ "defaults": {
+  "gapMs": 700
+ },
+ "chapters": [
+  {
+   "id": "c1",
+   "title": "Overview: Ignite as a whole, and where the thin client sits",
+   "items": [
+    {
+     "id": "c1.i1",
+     "title": "What Ignite is",
+     "phrases": [
+      {
+       "id": "c1.p1",
+       "text": "This walk explains the Apache Ignite 2.17.0 thin client to an engineer who must debug it, in about twenty-two minutes plus the stops."
+      },
+      {
+       "id": "c1.p3",
+       "text": "The README calls Ignite a distributed database for high-performance computing with in-memory speed.",
+       "code": {
+        "file": "README.md",
+        "start": 14,
+        "end": 14,
+        "anchor": "distributed database for high-performance computing with in-memory speed"
+       }
+      },
+      {
+       "id": "c1.p4",
+       "text": "Its feature list includes distributed key-value storage, SQL, the structured query language, and compute and service grids.",
+       "code": {
+        "file": "README.txt",
+        "start": 7,
+        "end": 17,
+        "anchor": "* Distributed Key-Value"
+       }
+      },
+      {
+       "id": "c1.p5",
+       "text": "Disk storage is optional: native persistence in a data region stays off unless you enable it.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/configuration/DataRegionConfiguration.java",
+        "start": 137,
+        "end": 140,
+        "anchor": "private boolean persistenceEnabled = false;"
+       }
+      }
+     ]
+    },
+    {
+     "id": "c1.d1",
+     "title": "Schema: Ignite at the top level",
+     "phrases": [
+      {
+       "id": "t1.p1",
+       "diagram": "d1-ignite-overview",
+       "diagramComponents": [
+        "cluster",
+        "srv"
+       ],
+       "diagramFocus": [
+        "Ignite cluster"
+       ],
+       "text": "This schema, drawn from the 2.17.0 code, shows Ignite's server nodes and how clients reach them."
+      },
+      {
+       "id": "t1.p2",
+       "diagram": "d1-ignite-overview",
+       "diagramComponents": [
+        "disc"
+       ],
+       "diagramFocus": [
+        "TcpDiscoverySpi by default"
+       ],
+       "text": "Nodes find each other through discovery. If you configure none, Ignite uses TcpDiscoverySpi.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/IgnitionEx.java",
+        "start": 2001,
+        "end": 2003,
+        "anchor": "cfg.setDiscoverySpi(new TcpDiscoverySpi());"
+       }
+      },
+      {
+       "id": "t1.p4",
+       "diagram": "d1-ignite-overview",
+       "diagramComponents": [
+        "comm",
+        "others"
+       ],
+       "diagramFocus": [
+        "TcpCommunicationSpi by default"
+       ],
+       "text": "Messages between nodes travel through the communication service, by default TcpCommunicationSpi.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/IgnitionEx.java",
+        "start": 2012,
+        "end": 2013,
+        "anchor": "cfg.setCommunicationSpi(new TcpCommunicationSpi());"
+       }
+      },
+      {
+       "id": "t1.p7",
+       "diagram": "d1-ignite-overview",
+       "diagramComponents": [
+        "thick"
+       ],
+       "diagramFocus": [
+        "Thick client node"
+       ],
+       "text": "A thick client is a full node in client mode; its discovery documentation says it routes discovery traffic through one server node.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/spi/discovery/tcp/TcpDiscoverySpi.java",
+        "start": 130,
+        "end": 133,
+        "anchor": "use it as a router for discovery traffic."
+       }
+      },
+      {
+       "id": "t1.p8",
+       "diagram": "d1-ignite-overview",
+       "diagramComponents": [
+        "conn",
+        "thin",
+        "jdbc",
+        "odbc"
+       ],
+       "diagramFocus": [
+        "Client connector"
+       ],
+       "text": "Three kinds of remote clients share one server listener, the client connector: the thin client and the drivers for JDBC, Java Database Connectivity, and ODBC, Open Database Connectivity.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/processors/odbc/ClientListenerNioListener.java",
+        "start": 465,
+        "end": 481,
+        "anchor": "return new ClientConnectionContext(ctx, ses, connId, maxCursors, thinCfg);"
+       }
+      },
+      {
+       "id": "t1.p10",
+       "diagram": "d1-ignite-overview",
+       "diagramComponents": [
+        "rest",
+        "http"
+       ],
+       "diagramFocus": [
+        "REST over HTTP"
+       ],
+       "text": "REST, representational state transfer, over HTTP, the hypertext transfer protocol, starts only when the rest-http module is on the class path.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/processors/rest/GridRestProcessor.java",
+        "start": 995,
+        "end": 1014,
+        "anchor": "consider adding ignite-rest-http"
+       }
+      },
+      {
+       "id": "t1.p11",
+       "diagram": "d1-ignite-overview",
+       "diagramComponents": [
+        "thin"
+       ],
+       "diagramFocus": [
+        "Not a cluster node: it opens its own TCP"
+       ],
+       "text": "The thin client is not a node: it builds its own small network layer for TCP connections, transmission control protocol, to client connectors.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/client/thin/io/gridnioserver/GridNioClientConnectionMultiplexer.java",
+        "start": 75,
+        "end": 110,
+        "anchor": ".port(CLIENT_MODE_PORT)"
+       }
+      },
+      {
+       "id": "t1.p12",
+       "diagram": "d1-ignite-overview",
+       "diagramComponents": [
+        "thin"
+       ],
+       "diagramFocus": [
+        "Ignition.startClient"
+       ],
+       "text": "An application starts one with Ignition.startClient, which hands the configuration to TcpIgniteClient.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/Ignition.java",
+        "start": 584,
+        "end": 588,
+        "anchor": "return TcpIgniteClient.start(cfg);"
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "c2",
+   "title": "Preparations: version, build, layout and configuration",
+   "items": [
+    {
+     "id": "c2.i1",
+     "title": "Version and build",
+     "phrases": [
+      {
+       "id": "c2.p1",
+       "text": "The code is Apache Ignite 2.17.0, at the commit recorded with this walk; the parent build file sets the version, and Java 11 source level.",
+       "code": {
+        "file": "parent/pom.xml",
+        "start": 48,
+        "end": 52,
+        "anchor": "<revision>2.17.0</revision>"
+       }
+      },
+      {
+       "id": "c2.p3",
+       "text": "The developer notes give the full build through the Maven wrapper, mvnw: clean install with the all-java and licenses profiles, skipping tests.",
+       "code": {
+        "file": "DEVNOTES.txt",
+        "start": 13,
+        "end": 17,
+        "anchor": "./mvnw clean install -Pall-java,licenses -DskipTests"
+       },
+       "action": {
+        "kind": "build",
+        "where": "a shell in the project root (Linux, WSL or macOS)",
+        "do": "./mvnw clean install -Pall-java,licenses -DskipTests\nThis is the full build from DEVNOTES.txt. The first run downloads Maven 3.8.3 (Maven wrapper) and all dependencies, so it needs network access and a JDK; the parent build file has profiles for JDK 11 to 14 and for 15 and later. The install also puts ignite-tools into the local Maven repository, which the surefire test plugin of this build needs for the test actions below. Not yet run.",
+        "status": "needs-approval",
+        "why": "long build; downloads Maven and dependencies"
+       },
+       "pauseAfter": true
+      },
+      {
+       "id": "c2.p5",
+       "text": "The test commands here set the property named fork count set to one, so tests run forked and get the Java module options.",
+       "code": {
+        "file": "parent/pom.xml",
+        "start": 889,
+        "end": 903,
+        "anchor": "<name>FORK_COUNT_SET_TO_1</name>"
+       },
+       "action": {
+        "kind": "test",
+        "where": "a shell in the project root, after the build action",
+        "do": "./mvnw -pl modules/core test -DFORK_COUNT_SET_TO_1 -Dtest='FunctionalTest#testPutGet*'\nFORK_COUNT_SET_TO_1 activates the profile that forks one test JVM, so the surefire argLine with the Java module options (java-11+ or java-15+ profile) applies. The quotes and the trailing star are needed because FunctionalTest is parameterized (useBinaryArrays), so its test names carry a suffix. The test starts a server node in the same JVM on the default ports (client connector 10800, discovery 47500): stop other local Ignite nodes first. Not yet run.",
+        "status": "needs-approval",
+        "why": "compiles and runs tests of the core module"
+       },
+       "pauseAfter": true
+      },
+      {
+       "id": "c2.p7",
+       "text": "To run a server node, the notes describe a release build that leaves a binary zip under target bin.",
+       "code": {
+        "file": "DEVNOTES.txt",
+        "start": 28,
+        "end": 32,
+        "anchor": "./mvnw initialize -Prelease"
+       },
+       "action": {
+        "kind": "run",
+        "where": "a shell; the release zip is unpacked outside the source tree",
+        "do": "From the project root, after the build action: ./mvnw initialize -Prelease\nUnzip target/bin/apache-ignite-2.17.0-bin.zip (name pattern from DEVNOTES.txt) and change into the unpacked folder, then start a server node with the default configuration: bin/ignite.sh -v\n-v turns off quiet mode. Expect the log line: Client connector processor has started on TCP port 10800 (or the next free port up to 10900). For a remote debugger on the node add -J-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=8787 to the ignite.sh arguments (the -J prefix passes a JVM option, see bin/include/parseargs.sh). Not yet run.",
+        "status": "needs-approval",
+        "why": "release build and a running node listening on local ports"
+       },
+       "pauseAfter": true
+      }
+     ]
+    },
+    {
+     "id": "c2.d2",
+     "title": "Schema: where the code lives",
+     "phrases": [
+      {
+       "id": "t2.p1",
+       "diagram": "d2-source-layout",
+       "diagramComponents": [
+        "cside",
+        "sside"
+       ],
+       "text": "This schema maps the thin-client code in the 2.17.0 source tree."
+      },
+      {
+       "id": "t2.p2",
+       "diagram": "d2-source-layout",
+       "diagramComponents": [
+        "papi",
+        "ccfg"
+       ],
+       "diagramFocus": [
+        "org.apache.ignite.client"
+       ],
+       "text": "The public API, the application programming interface, is the package org.apache.ignite.client, starting with the IgniteClient interface.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/client/IgniteClient.java",
+        "start": 35,
+        "end": 35,
+        "anchor": "public interface IgniteClient extends AutoCloseable"
+       }
+      },
+      {
+       "id": "t2.p3",
+       "diagram": "d2-source-layout",
+       "diagramComponents": [
+        "impl",
+        "io"
+       ],
+       "diagramFocus": [
+        "internal.client.thin"
+       ],
+       "text": "The implementation is the internal package client.thin, led by TcpIgniteClient, which implements that interface.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/client/thin/TcpIgniteClient.java",
+        "start": 86,
+        "end": 91,
+        "anchor": "public class TcpIgniteClient implements IgniteClient"
+       }
+      },
+      {
+       "id": "t2.p5",
+       "diagram": "d2-source-layout",
+       "diagramComponents": [
+        "lpkg",
+        "scfg"
+       ],
+       "diagramFocus": [
+        "(shared with JDBC and ODBC)"
+       ],
+       "text": "On the server, the listener lives in the processors.odbc package; despite the name, it also serves JDBC and thin clients.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/processors/odbc/ClientListenerNioListener.java",
+        "start": 465,
+        "end": 481,
+        "anchor": "case JDBC_CLIENT:"
+       }
+      },
+      {
+       "id": "t2.p6",
+       "diagram": "d2-source-layout",
+       "diagramComponents": [
+        "plat"
+       ],
+       "diagramFocus": [
+        "internal.processors.platform.client"
+       ],
+       "text": "Thin-client specifics live in processors.platform.client: connection context, message parser, request handler, and the request classes.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/processors/platform/client/ClientMessageParser.java",
+        "start": 460,
+        "end": 474,
+        "anchor": "return new ClientCachePutRequest(reader);"
+       }
+      },
+      {
+       "id": "t2.p7",
+       "diagram": "d2-source-layout",
+       "diagramComponents": [
+        "t1",
+        "t2"
+       ],
+       "diagramFocus": [
+        "FunctionalTest, partition awareness tests"
+       ],
+       "text": "FunctionalTest in the same module starts a server node and a client in one Java process, handy for debugging both sides.",
+       "code": {
+        "file": "modules/core/src/test/java/org/apache/ignite/internal/client/thin/FunctionalTest.java",
+        "start": 275,
+        "end": 280,
+        "anchor": "Ignition.startClient(getClientConfiguration())"
+       }
+      }
+     ]
+    },
+    {
+     "id": "c2.i3",
+     "title": "Server configuration",
+     "phrases": [
+      {
+       "id": "c2.p10",
+       "text": "Every server node starts a client connector by default: the node configuration holds a default connector configuration.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/configuration/IgniteConfiguration.java",
+        "start": 585,
+        "end": 585,
+        "anchor": "ClientListenerProcessor.DFLT_CLI_CFG"
+       }
+      },
+      {
+       "id": "c2.p12",
+       "text": "ClientConnectorConfiguration defaults: port 10800 with a range of 100, a ten-second handshake timeout, and an idle timeout of zero, meaning none.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/configuration/ClientConnectorConfiguration.java",
+        "start": 31,
+        "end": 56,
+        "anchor": "DFLT_HANDSHAKE_TIMEOUT = 10_000;"
+       }
+      },
+      {
+       "id": "c2.p14",
+       "text": "It also turns thin clients, JDBC and ODBC on or off, all on by default, and holds the SSL, Secure Sockets Layer, settings.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/configuration/ClientConnectorConfiguration.java",
+        "start": 97,
+        "end": 113,
+        "anchor": "private boolean thinCliEnabled = true;"
+       }
+      },
+      {
+       "id": "c2.p15",
+       "text": "ThinClientConfiguration sets limits: one hundred active transactions per connection, and zero compute tasks.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/configuration/ThinClientConfiguration.java",
+        "start": 28,
+        "end": 38,
+        "anchor": "DFLT_MAX_ACTIVE_COMPUTE_TASKS_PER_CONNECTION = 0;"
+       }
+      },
+      {
+       "id": "c2.p16",
+       "text": "With zero, the server refuses thin-client compute with a functionality disabled error.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/processors/platform/client/ClientConnectionContext.java",
+        "start": 344,
+        "end": 349,
+        "anchor": "Compute grid functionality is disabled for thin clients on server node."
+       }
+      }
+     ]
+    },
+    {
+     "id": "c2.i4",
+     "title": "Client configuration",
+     "phrases": [
+      {
+       "id": "c2.p17",
+       "text": "On the client, an address without a port expands to every port from 10800 to 10900.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/client/thin/ClientDiscoveryContext.java",
+        "start": 224,
+        "end": 237,
+        "anchor": "ClientConnectorConfiguration.DFLT_PORT + ClientConnectorConfiguration.DFLT_PORT_RANGE,"
+       }
+      },
+      {
+       "id": "c2.p18",
+       "text": "Each port is a separate endpoint, so one address without a port gives a hundred and one endpoints.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/client/thin/ClientDiscoveryContext.java",
+        "start": 244,
+        "end": 248,
+        "anchor": "Collections.singletonList(InetSocketAddress.createUnresolved(r.host(), p))"
+       }
+      },
+      {
+       "id": "c2.p19",
+       "text": "The timeout defaults to zero, which means wait without limit.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/configuration/ClientConfiguration.java",
+        "start": 60,
+        "end": 61,
+        "anchor": "Timeout. 0 means infinite."
+       }
+      },
+      {
+       "id": "c2.p20",
+       "text": "Partition awareness and cluster discovery are on, reconnects are throttled to three per thirty seconds, and the retry policy agrees to every retry.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/configuration/ClientConfiguration.java",
+        "start": 117,
+        "end": 148,
+        "anchor": "private ClientRetryPolicy retryPolicy = new ClientRetryAllPolicy();"
+       }
+      },
+      {
+       "id": "c2.p21",
+       "text": "Heartbeats are off by default.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/configuration/ClientConfiguration.java",
+        "start": 153,
+        "end": 157,
+        "anchor": "private boolean heartbeatEnabled;"
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "c3",
+   "title": "Main design ideas of the thin client",
+   "items": [
+    {
+     "id": "c3.d3",
+     "title": "Idea one, with a schema: a binary protocol over TCP",
+     "phrases": [
+      {
+       "id": "t3.p1",
+       "diagram": "d3-wire-format",
+       "diagramComponents": [
+        "hreq",
+        "hresp",
+        "req",
+        "resp",
+        "cpay"
+       ],
+       "text": "This schema shows the protocol frames as the 2.17.0 code writes and reads them."
+      },
+      {
+       "id": "t3.p2",
+       "diagram": "d3-wire-format",
+       "diagramComponents": [
+        "hreq",
+        "req"
+       ],
+       "diagramFocus": [
+        "int32 length (not counting itself)"
+       ],
+       "text": "Design idea one: a binary protocol over TCP. Every message starts with a four-byte length that does not count itself.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/client/thin/TcpClientChannel.java",
+        "start": 385,
+        "end": 394,
+        "anchor": "req.writeInt(0, req.position() - 4); // Actual size."
+       }
+      },
+      {
+       "id": "t3.p3",
+       "diagram": "d3-wire-format",
+       "diagramFocus": [
+        "all numbers little-endian"
+       ],
+       "text": "Numbers are little-endian, whatever the machine.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/client/thin/io/gridnioserver/GridNioClientParser.java",
+        "start": 51,
+        "end": 52,
+        "anchor": "Thin client protocol is little-endian."
+       }
+      },
+      {
+       "id": "t3.p4",
+       "diagram": "d3-wire-format",
+       "diagramComponents": [
+        "req"
+       ],
+       "diagramFocus": [
+        "int16 operation code",
+        "int64 request id"
+       ],
+       "text": "A request then holds a two-byte operation code, an eight-byte request id, and the payload.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/client/thin/TcpClientChannel.java",
+        "start": 387,
+        "end": 392,
+        "anchor": "req.writeLong(id);"
+       }
+      },
+      {
+       "id": "t3.p6",
+       "diagram": "d3-wire-format",
+       "diagramComponents": [
+        "cpay"
+       ],
+       "diagramFocus": [
+        "byte flags: 1 keep binary, 2 transaction, 4 expiry"
+       ],
+       "text": "A cache payload starts with the cache id and a flags byte; expiry durations, then a transaction id, follow only when flagged.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/client/thin/TcpClientCache.java",
+        "start": 1478,
+        "end": 1509,
+        "anchor": "out.writeInt(tx.txId());"
+       }
+      },
+      {
+       "id": "t3.p7",
+       "diagram": "d3-wire-format",
+       "diagramComponents": [
+        "resp"
+       ],
+       "diagramFocus": [
+        "int16 flags (1.4.0+): 1 error, 2 topology changed, 4 notification"
+       ],
+       "text": "A response starts with the request id. From protocol version 1.4.0, two bytes of flags follow: error, topology changed, and notification.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/client/thin/TcpClientChannel.java",
+        "start": 530,
+        "end": 560,
+        "anchor": "short flags = dataInput.readShort();"
+       }
+      },
+      {
+       "id": "t3.p8",
+       "diagram": "d3-wire-format",
+       "diagramComponents": [
+        "resp"
+       ],
+       "diagramFocus": [
+        "int64 + int32 topology version (flag 2)"
+       ],
+       "text": "With the topology flag, the new topology version follows; with the error flag, a status code and a message follow.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/processors/platform/client/ClientResponse.java",
+        "start": 82,
+        "end": 101,
+        "anchor": "affinityVer.write(writer);"
+       }
+      },
+      {
+       "id": "t3.p10",
+       "diagram": "d3-wire-format",
+       "diagramComponents": [
+        "hreq"
+       ],
+       "diagramFocus": [
+        "byte 1 = handshake"
+       ],
+       "text": "The first message must be a handshake of at most 64 mebibytes, whose first three bytes are the handshake code and major version one or two.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/processors/odbc/ClientMessage.java",
+        "start": 154,
+        "end": 186,
+        "anchor": "Handshake header check failed: "
+       }
+      }
+     ]
+    },
+    {
+     "id": "c3.i2",
+     "title": "Idea two: versions and features agreed per connection",
+     "phrases": [
+      {
+       "id": "c3.p2",
+       "text": "Design idea two: version and features are agreed per connection. The client proposes protocol version 1.7.0 and can fall back to 1.0.0.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/client/thin/TcpClientChannel.java",
+        "start": 102,
+        "end": 115,
+        "anchor": "private static final ProtocolVersion DEFAULT_VERSION = LATEST_VER;"
+       }
+      },
+      {
+       "id": "c3.p5",
+       "diagram": "d3-wire-format",
+       "diagramComponents": [
+        "hreq"
+       ],
+       "diagramFocus": [
+        "byte 2 = thin client"
+       ],
+       "text": "The handshake carries the version, client type two, the client's feature bitmask, user attributes, and the user name and password if set.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/client/thin/TcpClientChannel.java",
+        "start": 849,
+        "end": 873,
+        "anchor": "writer.writeByte(ClientListenerNioListener.THIN_CLIENT);"
+       }
+      },
+      {
+       "id": "c3.p7",
+       "diagram": "d3-wire-format",
+       "diagramComponents": [
+        "hresp"
+       ],
+       "diagramFocus": [
+        "if success: server node id (1.4.0+)"
+       ],
+       "text": "The reply carries the agreed features and, from 1.4.0, the server's node id.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/client/thin/TcpClientChannel.java",
+        "start": 749,
+        "end": 760,
+        "anchor": "srvNodeId = reader.readUuid();"
+       }
+      },
+      {
+       "id": "c3.p8",
+       "text": "If the server refuses the version, it names its own; the client retries with it if supported, and otherwise fails.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/client/thin/TcpClientChannel.java",
+        "start": 789,
+        "end": 819,
+        "anchor": "Retrying handshake with server version"
+       }
+      },
+      {
+       "id": "c3.p9",
+       "text": "A wrong password makes the handshake throw a client authentication exception.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/client/thin/TcpClientChannel.java",
+        "start": 784,
+        "end": 811,
+        "anchor": "resultErr = new ClientAuthenticationException(err);"
+       }
+      },
+      {
+       "id": "c3.p9a",
+       "text": "It is not a connection error, so the call tries no other server.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/client/thin/ReliableChannel.java",
+        "start": 879,
+        "end": 889,
+        "anchor": "catch (ClientConnectionException e) {"
+       }
+      }
+     ]
+    },
+    {
+     "id": "c3.i3",
+     "title": "Idea three: many requests on one connection",
+     "phrases": [
+      {
+       "id": "c3.p11",
+       "text": "Design idea three: requests share a connection. Each channel numbers requests from one and keeps the pending ones by id.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/client/thin/TcpClientChannel.java",
+        "start": 135,
+        "end": 139,
+        "anchor": "private final AtomicLong reqId = new AtomicLong(1);"
+       }
+      },
+      {
+       "id": "c3.p12",
+       "text": "On the server, each message goes to a thread pool, so requests from one connection can finish out of order.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/util/nio/GridNioAsyncNotifyFilter.java",
+        "start": 93,
+        "end": 105,
+        "anchor": "message-received-notify"
+       }
+      },
+      {
+       "id": "c3.p14",
+       "text": "A synchronous call waits on its future, with the configured timeout when it is above zero.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/client/thin/TcpClientChannel.java",
+        "start": 417,
+        "end": 442,
+        "anchor": "ByteBuffer payload = timeout > 0 ? pendingReq.get(timeout) : pendingReq.get();"
+       }
+      },
+      {
+       "id": "c3.p15",
+       "text": "If that timeout fires, the call fails with a plain client exception, and nothing tells the server to stop.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/client/thin/TcpClientChannel.java",
+        "start": 434,
+        "end": 515,
+        "anchor": "return new ClientException(e.getMessage(), e);"
+       }
+      },
+      {
+       "id": "c3.p15a",
+       "text": "So a timed-out put may still be applied, and its late reply goes unused.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/client/thin/TcpClientChannel.java",
+        "start": 585,
+        "end": 592,
+        "anchor": "pendingReq.onDone(res, err);"
+       }
+      },
+      {
+       "id": "c3.p15b",
+       "text": "The reliable channel retries only connection exceptions, so the call is not retried, and the connection stays open.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/client/thin/ReliableChannel.java",
+        "start": 879,
+        "end": 889,
+        "anchor": "catch (ClientConnectionException e) {"
+       }
+      },
+      {
+       "id": "c3.p16",
+       "text": "An asynchronous call only registers a listener, so the wait for its response has no client-side timeout.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/client/thin/TcpClientChannel.java",
+        "start": 452,
+        "end": 481,
+        "anchor": "pendingReq.listen(() -> asyncContinuationExecutor.execute(() -> {"
+       }
+      },
+      {
+       "id": "c3.p16a",
+       "text": "The same timeout setting limits two more waits of every new channel: first, the socket connect.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/client/thin/io/gridnioserver/GridNioClientConnectionMultiplexer.java",
+        "start": 92,
+        "end": 152,
+        "anchor": "connTimeout = cfg.getTimeout();"
+       }
+      },
+      {
+       "id": "c3.p16b",
+       "text": "Second, the handshake reply. A handshake timeout is a connection error, so, unlike a request timeout, the call can move to another server.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/client/thin/TcpClientChannel.java",
+        "start": 741,
+        "end": 828,
+        "anchor": "ByteBuffer buf = timeout > 0 ? fut.get(timeout) : fut.get();"
+       }
+      }
+     ]
+    },
+    {
+     "id": "c3.i4",
+     "title": "Ideas four to six: partition awareness, failover, security",
+     "phrases": [
+      {
+       "id": "c3.p18",
+       "text": "Design idea four: partition awareness. With a current partition map, a key operation goes straight to the node the map names; otherwise the reliable channel picks one.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/client/thin/ReliableChannel.java",
+        "start": 340,
+        "end": 357,
+        "anchor": "UUID affNodeId = affinityCtx.affinityNode(cacheId, key);"
+       }
+      },
+      {
+       "id": "c3.p20",
+       "text": "Design idea five: failover. After a connection error the call moves to another server, while attempts remain and the retry policy agrees.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/client/thin/ReliableChannel.java",
+        "start": 879,
+        "end": 889,
+        "anchor": "if (op != null && !shouldRetry(op, failures.size() - 1, e))"
+       }
+      },
+      {
+       "id": "c3.p21",
+       "text": "Design idea six: security is optional. The server authenticates a client only when security is enabled on the node.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/processors/odbc/ClientListenerAbstractConnectionContext.java",
+        "start": 108,
+        "end": 129,
+        "anchor": "if (!ctx.security().enabled())"
+       }
+      },
+      {
+       "id": "c3.p23",
+       "text": "The handshake sends the user name and password as plain strings: without SSL they cross the network in clear text.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/client/thin/TcpClientChannel.java",
+        "start": 866,
+        "end": 871,
+        "anchor": "writer.writeString(pwd);"
+       }
+      },
+      {
+       "id": "c3.p24",
+       "text": "On the client, SSL stays off until you set an SSL mode other than disabled.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/client/thin/ClientSslUtils.java",
+        "start": 79,
+        "end": 81,
+        "anchor": "if (cfg.getSslMode() == SslMode.DISABLED)"
+       }
+      },
+      {
+       "id": "c3.p25",
+       "text": "On the server, sslEnabled adds an SSL filter, by default with the node's SSL context factory; sslClientAuth demands client certificates.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/processors/odbc/ClientListenerProcessor.java",
+        "start": 410,
+        "end": 426,
+        "anchor": "sslFilter.needClientAuth(auth);"
+       }
+      },
+      {
+       "id": "c3.p27",
+       "text": "A security exception in a request reaches the client as a client authorization exception.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/client/thin/TcpClientChannel.java",
+        "start": 574,
+        "end": 577,
+        "anchor": "else if (status == ClientStatus.SECURITY_VIOLATION) {"
+       }
+      }
+     ]
+    },
+    {
+     "id": "c3.i5",
+     "title": "What a thin client does not offer",
+     "phrases": [
+      {
+       "id": "c3.p28",
+       "text": "Compared with the Ignite interface, IgniteClient has no data streamer, events, messaging, locks, latches, semaphores, queues or atomic sequences; it does offer atomic longs and sets.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/client/IgniteClient.java",
+        "start": 158,
+        "end": 254,
+        "anchor": "public ClientAtomicLong atomicLong(String name, long initVal, boolean create);"
+       }
+      },
+      {
+       "id": "c3.p30",
+       "text": "Compute takes a task name, not code, so the task class must already be on the servers.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/client/ClientCompute.java",
+        "start": 49,
+        "end": 49,
+        "anchor": "public <T, R> R execute(String taskName, @Nullable T arg)"
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "c4",
+   "title": "Modules: the client side and the server side",
+   "items": [
+    {
+     "id": "c4.d4",
+     "title": "Schema: the client side",
+     "phrases": [
+      {
+       "id": "t4.p1",
+       "diagram": "d4-client-modules",
+       "diagramComponents": [
+        "start",
+        "tic",
+        "tcc",
+        "rc",
+        "hold",
+        "tch"
+       ],
+       "text": "This schema shows the client-side classes of 2.17.0 in call order."
+      },
+      {
+       "id": "t4.p2",
+       "diagram": "d4-client-modules",
+       "diagramComponents": [
+        "tic"
+       ],
+       "text": "TcpIgniteClient is the facade; its constructor builds the binary marshaller and the reliable channel, then connects.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/client/thin/TcpIgniteClient.java",
+        "start": 138,
+        "end": 158,
+        "anchor": "ch.channelsInit();"
+       }
+      },
+      {
+       "id": "t4.p3",
+       "diagram": "d4-client-modules",
+       "diagramComponents": [
+        "tcc"
+       ],
+       "diagramFocus": [
+        "handle per cache name"
+       ],
+       "text": "TcpClientCache is a light handle: asking the client for a cache by name sends nothing to the server.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/client/thin/TcpIgniteClient.java",
+        "start": 239,
+        "end": 243,
+        "anchor": "return new TcpClientCache<>(name, ch, marsh, transactions, lsnrsRegistry);"
+       }
+      },
+      {
+       "id": "t4.p4",
+       "diagram": "d4-client-modules",
+       "diagramComponents": [
+        "tcc"
+       ],
+       "text": "So a wrong cache name fails only at the first operation, when the server says the cache does not exist.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/processors/platform/client/cache/ClientCacheRequest.java",
+        "start": 154,
+        "end": 162,
+        "anchor": "Cache does not exist [cacheId= "
+       }
+      },
+      {
+       "id": "t4.p7",
+       "diagram": "d4-client-modules",
+       "diagramComponents": [
+        "tch"
+       ],
+       "text": "TcpClientChannel is one TCP connection: it holds the socket, numbers the requests and keeps their futures until the responses arrive.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/client/thin/TcpClientChannel.java",
+        "start": 132,
+        "end": 139,
+        "anchor": "private volatile ClientConnection sock;"
+       }
+      },
+      {
+       "id": "t4.p8",
+       "diagram": "d4-client-modules",
+       "diagramComponents": [
+        "mux",
+        "parser"
+       ],
+       "diagramFocus": [
+        "one selector"
+       ],
+       "text": "All channels of one client share one multiplexer, a GridNioServer in client mode with a single selector.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/client/thin/io/gridnioserver/GridNioClientConnectionMultiplexer.java",
+        "start": 94,
+        "end": 110,
+        "anchor": ".selectorCount(1)"
+       }
+      },
+      {
+       "id": "t4.p12",
+       "diagram": "d4-client-modules",
+       "diagramComponents": [
+        "marsh"
+       ],
+       "diagramFocus": [
+        "Ignite binary format"
+       ],
+       "text": "When the client writes a binary type it has not registered yet, or whose metadata has changed, it first sends a separate put binary type request.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/client/thin/TcpIgniteClient.java",
+        "start": 609,
+        "end": 623,
+        "anchor": "ClientOperation.PUT_BINARY_TYPE,"
+       }
+      }
+     ]
+    },
+    {
+     "id": "c4.d5",
+     "title": "Schema: the server side",
+     "phrases": [
+      {
+       "id": "t5.p1",
+       "diagram": "d5-server-modules",
+       "diagramComponents": [
+        "proc",
+        "nio",
+        "lsnr",
+        "handler",
+        "cache"
+       ],
+       "text": "This schema shows the server side in 2.17.0, from the socket to the cache and back."
+      },
+      {
+       "id": "t5.p2",
+       "diagram": "d5-server-modules",
+       "diagramComponents": [
+        "proc",
+        "nio"
+       ],
+       "diagramFocus": [
+        "GridNioServer client-listener"
+       ],
+       "text": "ClientListenerProcessor starts a GridNioServer named client-listener, with the connector's selector count.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/processors/odbc/ClientListenerProcessor.java",
+        "start": 182,
+        "end": 200,
+        "anchor": ".serverName(\"client-listener\")"
+       }
+      },
+      {
+       "id": "t5.p3",
+       "diagram": "d5-server-modules",
+       "diagramComponents": [
+        "ssl",
+        "codec"
+       ],
+       "text": "Incoming bytes pass the SSL filter if SSL is on, then the codec filter, which builds one client message per frame.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/processors/odbc/ClientListenerProcessor.java",
+        "start": 408,
+        "end": 438,
+        "anchor": "new GridNioCodecFilter(new ClientListenerNioMessageParser(log), log, true);"
+       }
+      },
+      {
+       "id": "t5.p4",
+       "diagram": "d5-server-modules",
+       "diagramComponents": [
+        "notify"
+       ],
+       "text": "Then the async notify filter hands each message to the processor's executor.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/processors/odbc/ClientListenerProcessor.java",
+        "start": 359,
+        "end": 361,
+        "anchor": "new GridNioAsyncNotifyFilter(ctx.igniteInstanceName(), execSvc, log)"
+       }
+      },
+      {
+       "id": "t5.p4a",
+       "diagram": "d5-server-modules",
+       "diagramComponents": [
+        "pool"
+       ],
+       "diagramFocus": [
+        "client-connector pool"
+       ],
+       "text": "That executor is the client-connector pool, sized by the connector's thread pool size, with an unbounded queue.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/processors/pool/PoolProcessor.java",
+        "start": 545,
+        "end": 555,
+        "anchor": "new LinkedBlockingQueue<>(),"
+       }
+      },
+      {
+       "id": "t5.p5",
+       "diagram": "d5-server-modules",
+       "diagramComponents": [
+        "lsnr",
+        "cctx"
+       ],
+       "text": "ClientListenerNioListener receives it: with no connection context yet, it is the handshake; afterwards, a request to decode and handle.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/processors/odbc/ClientListenerNioListener.java",
+        "start": 162,
+        "end": 185,
+        "anchor": "onHandshake(ses, msg);"
+       }
+      },
+      {
+       "id": "t5.p8",
+       "diagram": "d5-server-modules",
+       "diagramComponents": [
+        "handler"
+       ],
+       "text": "ClientRequestHandler runs a request directly or, if it is asynchronous, waits briefly and otherwise answers when its future completes.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/processors/platform/client/ClientRequestHandler.java",
+        "start": 127,
+        "end": 150,
+        "anchor": "return new ClientAsyncResponse(req0.requestId(), fut);"
+       }
+      },
+      {
+       "id": "t5.p10",
+       "diagram": "d5-server-modules",
+       "diagramComponents": [
+        "reqs"
+       ],
+       "text": "Cache key requests are asynchronous only on transactional caches; the code comment says such operations can block the thread.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/processors/platform/client/cache/ClientCacheKeyRequest.java",
+        "start": 66,
+        "end": 70,
+        "anchor": "CacheAtomicityMode.TRANSACTIONAL"
+       }
+      },
+      {
+       "id": "t5.p11",
+       "diagram": "d5-server-modules",
+       "diagramComponents": [
+        "cache"
+       ],
+       "diagramFocus": [
+        "keep binary for key requests"
+       ],
+       "text": "Cache key requests, such as put and get, use the server's cache in keep-binary mode, so keys and values stay binary there.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/processors/platform/client/cache/ClientCacheRequest.java",
+        "start": 76,
+        "end": 78,
+        "anchor": "return rawCache(ctx).withKeepBinary();"
+       }
+      },
+      {
+       "id": "t5.p14",
+       "diagram": "d5-server-modules",
+       "diagramComponents": [
+        "cctx"
+       ],
+       "text": "When a client disconnects, the server cleans up its resources.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/processors/platform/client/ClientConnectionContext.java",
+        "start": 247,
+        "end": 251,
+        "anchor": "resReg.clean();"
+       }
+      },
+      {
+       "id": "t5.p14a",
+       "diagram": "d5-server-modules",
+       "diagramComponents": [
+        "cctx"
+       ],
+       "text": "It also closes the client's open transactions.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/processors/platform/client/ClientConnectionContext.java",
+        "start": 325,
+        "end": 330,
+        "anchor": "txCtx.close();"
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "c5",
+   "title": "Top-level workflows: connect, put and get, routing and failover",
+   "items": [
+    {
+     "id": "c5.d6",
+     "title": "Workflow a: connect and handshake",
+     "phrases": [
+      {
+       "id": "t6.p1",
+       "diagram": "d6-connect-handshake",
+       "diagramComponents": [
+        "app",
+        "tic",
+        "rc",
+        "tch",
+        "srvl"
+       ],
+       "text": "This sequence, drawn from the 2.17.0 code, shows the connect and the handshake."
+      },
+      {
+       "id": "t6.p3",
+       "diagram": "d6-connect-handshake",
+       "diagramComponents": [
+        "rc",
+        "disco"
+       ],
+       "diagramFocus": [
+        "configured addresses;"
+       ],
+       "text": "channelsInit takes its endpoints from the discovery context; before any discovery, those are the configured addresses.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/client/thin/ClientDiscoveryContext.java",
+        "start": 198,
+        "end": 212,
+        "anchor": "String[] hostAddrs = addrFinder == null ? addresses : addrFinder.getAddresses();"
+       }
+      },
+      {
+       "id": "t6.p3a",
+       "text": "The reliable channel keeps its channels in holders of the ClientChannelHolder class: each holds a group of addresses, the channel to them, and the times of its reconnect attempts.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/client/thin/ReliableChannel.java",
+        "start": 1005,
+        "end": 1019,
+        "anchor": "class ClientChannelHolder {"
+       },
+       "diagram": "d6-connect-handshake",
+       "diagramComponents": [
+        "hold"
+       ]
+      },
+      {
+       "id": "t6.p3b",
+       "text": "One holder is the default, the one connected first; at start it is picked at random among the holders with the lowest port.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/client/thin/ReliableChannel.java",
+        "start": 712,
+        "end": 722,
+        "anchor": "dfltChannelIdx = ThreadLocalRandom.current().nextInt(limit + 1);"
+       },
+       "diagram": "d6-connect-handshake",
+       "diagramComponents": [
+        "hold"
+       ]
+      },
+      {
+       "id": "t6.p5",
+       "diagram": "d6-connect-handshake",
+       "diagramComponents": [
+        "hold",
+        "tch"
+       ],
+       "diagramFocus": [
+        "new TcpClientChannel"
+       ],
+       "text": "Then it connects the default holder: a new TcpClientChannel tries the holder's addresses in turn until a socket opens.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/client/thin/TcpClientChannel.java",
+        "start": 202,
+        "end": 221,
+        "anchor": "sock = connMgr.open(addr, this, this);"
+       }
+      },
+      {
+       "id": "t6.p7",
+       "diagram": "d6-connect-handshake",
+       "diagramComponents": [
+        "srvl"
+       ],
+       "diagramFocus": [
+        "onConnected: handshake timer"
+       ],
+       "text": "On the server, each new connection gets a handshake timer, ten seconds by default; without a handshake in time, the session closes with a warning.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/processors/odbc/ClientListenerNioListener.java",
+        "start": 302,
+        "end": 317,
+        "anchor": "Unable to perform handshake within timeout "
+       }
+      },
+      {
+       "id": "t6.p8",
+       "diagram": "d6-connect-handshake",
+       "diagramComponents": [
+        "tch",
+        "srvl",
+        "cctx"
+       ],
+       "diagramFocus": [
+        "handshake: version 1.7.0, type 2,"
+       ],
+       "text": "The server reads the version and client type, builds the connection context, and checks the type is enabled and the version supported.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/processors/odbc/ClientListenerNioListener.java",
+        "start": 363,
+        "end": 389,
+        "anchor": "if (connCtx.isVersionSupported(ver)) {"
+       }
+      },
+      {
+       "id": "t6.p9",
+       "diagram": "d6-connect-handshake",
+       "diagramComponents": [
+        "cctx"
+       ],
+       "diagramFocus": [
+        "initializeFromHandshake:"
+       ],
+       "text": "initializeFromHandshake reads the features, attributes and credentials, authenticates, and creates the request handler and message parser.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/processors/platform/client/ClientConnectionContext.java",
+        "start": 188,
+        "end": 234,
+        "anchor": "parser = new ClientMessageParser(this, currentProtocolContext);"
+       }
+      },
+      {
+       "id": "t6.p11",
+       "diagram": "d6-connect-handshake",
+       "diagramComponents": [
+        "srvl",
+        "tch"
+       ],
+       "diagramFocus": [
+        "true, features, node id"
+       ],
+       "text": "On success the server cancels the timer and replies true, its features and node id; on failure, false, a version, a message and a status.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/processors/odbc/ClientListenerNioListener.java",
+        "start": 391,
+        "end": 454,
+        "anchor": "connCtx.handler().writeHandshake(writer);"
+       }
+      },
+      {
+       "id": "t6.p13",
+       "diagram": "d6-connect-handshake",
+       "diagramComponents": [
+        "hold",
+        "rc"
+       ],
+       "diagramFocus": [
+        "add topology listener;"
+       ],
+       "text": "The holder then registers the reliable channel as a topology listener, and files the channel under the server's node id.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/client/thin/ReliableChannel.java",
+        "start": 1079,
+        "end": 1095,
+        "anchor": "channel.addTopologyChangeListener(ReliableChannel.this::onTopologyChanged);"
+       }
+      },
+      {
+       "id": "t6.p14",
+       "diagram": "d6-connect-handshake",
+       "diagramComponents": [
+        "rc"
+       ],
+       "diagramFocus": [
+        "initAllChannelsAsync()"
+       ],
+       "text": "With partition awareness on, channelsInit then starts connecting all other holders in the background.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/client/thin/ReliableChannel.java",
+        "start": 770,
+        "end": 774,
+        "anchor": "initAllChannelsAsync();"
+       }
+      },
+      {
+       "id": "t6.p15",
+       "diagram": "d6-connect-handshake",
+       "diagramComponents": [
+        "rc"
+       ],
+       "text": "That task ignores the reconnect throttle: an address without a port can cost a hundred and one connect attempts, each failure a warning with a logger set.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/client/thin/ReliableChannel.java",
+        "start": 565,
+        "end": 575,
+        "anchor": "hld.getOrCreateChannel(true);"
+       }
+      },
+      {
+       "id": "t6.p17",
+       "diagram": "d6-connect-handshake",
+       "diagramComponents": [
+        "cctx",
+        "tch"
+       ],
+       "diagramFocus": [
+        "first response on the connection"
+       ],
+       "text": "The server flags the first response on each connection as topology changed, since it has reported no version there yet.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/processors/platform/client/ClientConnectionContext.java",
+        "start": 280,
+        "end": 296,
+        "anchor": "boolean changed = oldVer == null || oldVer.compareTo(newVer) < 0;"
+       }
+      },
+      {
+       "id": "t6.p18",
+       "diagram": "d6-connect-handshake",
+       "diagramComponents": [
+        "rc",
+        "disco"
+       ],
+       "diagramFocus": [
+        "topology listener: onTopologyChanged"
+       ],
+       "text": "That reaches onTopologyChanged, which, in the background, refreshes the server endpoints and, with partition awareness, runs channelsInit again.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/client/thin/ReliableChannel.java",
+        "start": 586,
+        "end": 606,
+        "anchor": "discoveryCtx.refresh(ch);"
+       }
+      }
+     ]
+    },
+    {
+     "id": "c5.i1",
+     "title": "Debugging the connect: breakpoints and logs",
+     "phrases": [
+      {
+       "id": "c5.p1",
+       "text": "To watch this, debug the put and get functional test, starting at TcpClientChannel.handshake and ClientListenerNioListener.onHandshake; the action lists the rest.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/client/thin/TcpClientChannel.java",
+        "start": 713,
+        "end": 716,
+        "anchor": "private void handshake(ProtocolVersion ver, String user, String pwd, Map<String, String> userAttrs)"
+       },
+       "action": {
+        "kind": "debug",
+        "where": "project root, after the build action; an IDE with a Remote JVM Debug configuration",
+        "do": "./mvnw -pl modules/core test -DFORK_COUNT_SET_TO_1 -Dtest='FunctionalTest#testPutGet*' -Dmaven.surefire.debug\nWith maven.surefire.debug the forked test JVM waits for a debugger on port 5005 (surefire default). Attach the IDE to localhost:5005. Client and server run in this one JVM, so set breakpoints on both sides: TcpClientChannel.handshake and handshakeReq (client), ClientListenerNioListener.onHandshake and ClientConnectionContext.initializeFromHandshake (server), ClientRequestHandler.writeHandshake (reply). The build files set no debug=false, so the compiled classes carry debug information. Not yet run.",
+        "status": "needs-approval",
+        "why": "runs tests and opens a debug port"
+       },
+       "pauseAfter": true
+      },
+      {
+       "id": "c5.p2",
+       "text": "For client logs, set a logger in the configuration; without one, the client uses a null logger and stays silent.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/client/thin/TcpIgniteClient.java",
+        "start": 138,
+        "end": 138,
+        "anchor": "log = NullLogger.whenNull(cfg.getLogger());"
+       },
+       "action": {
+        "kind": "log",
+        "where": "the client configuration in your application or test",
+        "do": "import org.apache.ignite.configuration.ClientConfiguration; import org.apache.ignite.client.events.*; import org.apache.ignite.logger.java.JavaLogger;\nConnectionEventListener connectionListener = new ConnectionEventListener() {\n    @Override public void onHandshakeFail(HandshakeFailEvent e) { System.out.println(\"handshake failed: \" + e.throwable()); }\n    @Override public void onConnectionClosed(ConnectionClosedEvent e) { System.out.println(\"closed: \" + e.connectionDescription().remoteAddress() + \" \" + e.throwable()); }\n};\nRequestEventListener requestListener = new RequestEventListener() {\n    @Override public void onRequestFail(RequestFailEvent e) { System.out.println(\"request failed: \" + e.operationName() + \" id \" + e.requestId() + \": \" + e.throwable()); }\n};\nClientConfiguration cfg = new ClientConfiguration().setAddresses(\"127.0.0.1:10800\")\n    .setLogger(new JavaLogger())\n    .setEventListeners(connectionListener, requestListener);\nBoth listener interfaces have only default methods (onHandshakeStart, onHandshakeSuccess, onHandshakeFail, onConnectionClosed; onRequestStart, onRequestSuccess, onRequestFail): override the ones you need. new JavaLogger() logs through the java.util.logging root logger, so debug lines such as Handshake succeeded appear only when the root logger and its console handler are set to FINE.",
+        "status": "planned"
+       },
+       "pauseAfter": true
+      },
+      {
+       "id": "c5.p4",
+       "text": "On the server, a refused version, client type or recovery mode logs the warning error during handshake; a wrong password only logs client authentication failed, at debug level.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/processors/odbc/ClientListenerNioListener.java",
+        "start": 397,
+        "end": 428,
+        "anchor": "Error during handshake [rmtAddr="
+       },
+       "action": {
+        "kind": "log",
+        "where": "the server node started by the node action",
+        "do": "If the node logs through java.util.logging (Ignite's fallback when the log4j2 module is not on the class path), add to config/java.util.logging.properties of the node and restart it:\norg.apache.ignite.internal.processors.odbc.ClientListenerNioListener.level=FINEST\njava.util.logging.ConsoleHandler.level=FINEST\nFINE gives the debug lines, FINEST also the trace lines. With log4j2, set the same logger name to DEBUG or TRACE in its configuration instead.\nLook for the warnings Error during handshake [rmtAddr=... (version, client type or recovery mode refused) and Unable to perform handshake within timeout, and at debug level Client handshake accepted [rmtAddr=... and Client authentication failed [rmtAddr=... (wrong user or password).",
+        "status": "planned"
+       },
+       "pauseAfter": true
+      },
+      {
+       "id": "c5.p4a",
+       "text": "After a refused handshake, such as a wrong password, the server may later warn of a handshake timeout too: the timer started at connect is cancelled only on success.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/processors/odbc/ClientListenerNioListener.java",
+        "start": 386,
+        "end": 406,
+        "anchor": "cancelHandshakeTimeout(ses);"
+       }
+      },
+      {
+       "id": "c5.p12",
+       "text": "The client connections system view lists each node's open client connections, and the control script can print it.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/processors/odbc/ClientListenerProcessor.java",
+        "start": 228,
+        "end": 233,
+        "anchor": "ctx.systemView().registerView(CLI_CONN_VIEW, CLI_CONN_VIEW_DESC,"
+       },
+       "action": {
+        "kind": "run",
+        "where": "the unpacked release folder, with the node from the node action running",
+        "do": "bin/control.sh --system-view client.connections --all-nodes\ncontrol.sh connects to 127.0.0.1:10800 by default. The affinity metrics live in the metric registry client.connector as AffinityKeyRequestsHits and AffinityKeyRequestsMisses; they count only for partitioned caches with statistics enabled (CacheConfiguration.setStatisticsEnabled(true)). Not yet run.",
+        "status": "needs-approval",
+        "why": "needs a running node"
+       },
+       "pauseAfter": true
+      }
+     ]
+    },
+    {
+     "id": "c5.d7",
+     "title": "Workflow b: a cache put and a cache get",
+     "phrases": [
+      {
+       "id": "t7.p1",
+       "diagram": "d7-put-get",
+       "diagramComponents": [
+        "app",
+        "tcc",
+        "tch",
+        "srvl",
+        "req",
+        "cache"
+       ],
+       "text": "This sequence, drawn from the 2.17.0 code, follows a put and a get from the client API to the cache and back."
+      },
+      {
+       "id": "t7.p2",
+       "diagram": "d7-put-get",
+       "diagramComponents": [
+        "app",
+        "tcc"
+       ],
+       "diagramFocus": [
+        "put(key, val)"
+       ],
+       "text": "ClientCache put rejects a null key or value, then runs a single-key operation with the cache put code.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/client/thin/TcpClientCache.java",
+        "start": 183,
+        "end": 196,
+        "anchor": "ClientOperation.CACHE_PUT,"
+       }
+      },
+      {
+       "id": "t7.p4",
+       "diagram": "d7-put-get",
+       "diagramComponents": [
+        "tcc",
+        "rc"
+       ],
+       "diagramFocus": [
+        "CACHE_PUT 1001)"
+       ],
+       "text": "Outside a transaction, a keyed call goes to affinityService on the reliable channel; inside one, to the transaction's own channel.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/client/thin/TcpClientCache.java",
+        "start": 1366,
+        "end": 1382,
+        "anchor": "return ch.affinityService(cacheId, affKey, op, payloadWriter, payloadReader);"
+       }
+      },
+      {
+       "id": "t7.p6",
+       "diagram": "d7-put-get",
+       "diagramComponents": [
+        "rc",
+        "tch"
+       ],
+       "diagramFocus": [
+        "send: next request id,"
+       ],
+       "text": "The chosen channel's send takes the next request id, registers a future under it, and writes the frame to the session.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/client/thin/TcpClientChannel.java",
+        "start": 353,
+        "end": 398,
+        "anchor": "pendingReqs.put(id, fut);"
+       }
+      },
+      {
+       "id": "t7.p7",
+       "diagram": "d7-put-get",
+       "diagramComponents": [
+        "srvl",
+        "mp"
+       ],
+       "diagramFocus": [
+        "decode(msg)"
+       ],
+       "text": "On the server, a client-connector thread decodes the frame and, for the put code, builds a ClientCachePutRequest.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/processors/platform/client/ClientMessageParser.java",
+        "start": 437,
+        "end": 474,
+        "anchor": "case OP_CACHE_PUT:"
+       }
+      },
+      {
+       "id": "t7.p9",
+       "diagram": "d7-put-get",
+       "diagramComponents": [
+        "hnd",
+        "req",
+        "cache"
+       ],
+       "diagramFocus": [
+        "process (atomic cache) or"
+       ],
+       "text": "For an atomic cache the request runs on this thread and calls put on the server's IgniteCache; this walk stops there.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/processors/platform/client/cache/ClientCachePutRequest.java",
+        "start": 39,
+        "end": 43,
+        "anchor": "cache(ctx).put(key(), val());"
+       }
+      },
+      {
+       "id": "t7.p10",
+       "diagram": "d7-put-get",
+       "diagramComponents": [
+        "req"
+       ],
+       "text": "Before that, outside transactions, it counts whether this node is primary for the key, on partitioned caches with statistics on: a check of partition awareness.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/processors/platform/client/cache/ClientCacheKeyRequest.java",
+        "start": 73,
+        "end": 95,
+        "anchor": "kctx.clientListener().metrics().onAffinityKeyHit();"
+       }
+      },
+      {
+       "id": "t7.p12",
+       "diagram": "d7-put-get",
+       "diagramComponents": [
+        "srvl",
+        "tch"
+       ],
+       "diagramFocus": [
+        "[topology version] [status, message]"
+       ],
+       "text": "The put answers with just a header: with flags in use and no error, the request id and flags, plus the topology version when the topology flag is set.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/processors/platform/client/ClientResponse.java",
+        "start": 74,
+        "end": 95,
+        "anchor": "If no return flag is set, no additional data is written to a payload."
+       }
+      },
+      {
+       "id": "t7.p13",
+       "diagram": "d7-put-get",
+       "diagramComponents": [
+        "tch"
+       ],
+       "diagramFocus": [
+        "processNextMessage: match id,"
+       ],
+       "text": "On the client's selector thread, processNextMessage matches the id, removes the pending future and completes it, waking the caller.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/client/thin/TcpClientChannel.java",
+        "start": 585,
+        "end": 592,
+        "anchor": "pendingReq.onDone(res, err);"
+       }
+      },
+      {
+       "id": "t7.p14",
+       "diagram": "d7-put-get",
+       "diagramComponents": [
+        "tcc"
+       ],
+       "diagramFocus": [
+        "CACHE_GET 1000)"
+       ],
+       "text": "get takes the same path with the cache get code, and no value in the request.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/client/thin/TcpClientCache.java",
+        "start": 157,
+        "end": 167,
+        "anchor": "ClientOperation.CACHE_GET,"
+       }
+      },
+      {
+       "id": "t7.p15",
+       "diagram": "d7-put-get",
+       "diagramComponents": [
+        "req",
+        "cache"
+       ],
+       "diagramFocus": [
+        "ClientObjectResponse: header + value"
+       ],
+       "text": "On the server, ClientCacheGetRequest calls get and wraps the value in a ClientObjectResponse.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/processors/platform/client/cache/ClientCacheGetRequest.java",
+        "start": 40,
+        "end": 44,
+        "anchor": "return new ClientObjectResponse(requestId(), val);"
+       }
+      },
+      {
+       "id": "t7.p17",
+       "diagram": "d7-put-get",
+       "diagramComponents": [
+        "tch",
+        "tcc"
+       ],
+       "diagramFocus": [
+        "value read by the marshaller"
+       ],
+       "text": "The client then deserializes the value, unless the cache handle keeps binary.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/client/thin/ClientUtils.java",
+        "start": 572,
+        "end": 580,
+        "anchor": "if (keepBinary)"
+       }
+      }
+     ]
+    },
+    {
+     "id": "c5.i2",
+     "title": "Errors on the put path: breakpoints and logs",
+     "phrases": [
+      {
+       "id": "c5.p5",
+       "text": "If processing throws, the server logs failed to process client request, and sends back a status code and a message.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/processors/odbc/ClientListenerNioListener.java",
+        "start": 266,
+        "end": 284,
+        "anchor": "Failed to process client request [req="
+       }
+      },
+      {
+       "id": "c5.p6",
+       "text": "It adds the server's stack trace only when configured to, which is off by default.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/processors/platform/client/ClientRequestHandler.java",
+        "start": 153,
+        "end": 171,
+        "anchor": "sendServerExceptionStackTraceToClient()"
+       }
+      },
+      {
+       "id": "c5.p7",
+       "text": "On the client, the error arrives as a ClientServerError with that status code, as the cause of a ClientException.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/client/thin/TcpClientChannel.java",
+        "start": 578,
+        "end": 582,
+        "anchor": "err = new ClientServerError(errMsg, status, resId);"
+       }
+      },
+      {
+       "id": "c5.p8",
+       "text": "Breakpoints for this path: TcpClientCache.put on the client and ClientCachePutRequest.process0 on the server; the action lists the rest.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/processors/odbc/ClientListenerNioListener.java",
+        "start": 162,
+        "end": 166,
+        "anchor": "@Override public void onMessage(GridNioSession ses, ClientMessage msg)"
+       },
+       "action": {
+        "kind": "debug",
+        "where": "the same debug session as the connect debug action",
+        "do": "Same command as the connect debug action (./mvnw -pl modules/core test -DFORK_COUNT_SET_TO_1 -Dtest='FunctionalTest#testPutGet*' -Dmaven.surefire.debug), attach on port 5005.\nClient: TcpClientCache.put and get, ReliableChannel.affinityService, TcpClientChannel.send and processNextMessage (runs on the client's selector thread).\nServer: ClientListenerNioListener.onMessage (client-connector pool thread), ClientMessageParser.decode, ClientRequestHandler.handle0, ClientCachePutRequest.process0, ClientCacheGetRequest.process0, ClientResponse.encode.",
+        "status": "needs-approval",
+        "why": "runs tests and opens a debug port"
+       },
+       "pauseAfter": true
+      },
+      {
+       "id": "c5.p9",
+       "text": "With trace logging for ClientListenerNioListener, the server logs each request received and processed, with id and duration.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/processors/odbc/ClientListenerNioListener.java",
+        "start": 205,
+        "end": 255,
+        "anchor": "Client request processed [reqId="
+       },
+       "action": {
+        "kind": "log",
+        "where": "the server node started by the node action",
+        "do": "If the node logs through java.util.logging (Ignite's fallback when the log4j2 module is not on the class path), add to config/java.util.logging.properties of the node and restart it:\norg.apache.ignite.internal.processors.odbc.ClientListenerNioListener.level=FINEST\njava.util.logging.ConsoleHandler.level=FINEST\nFINE gives the debug lines, FINEST also the trace lines. With log4j2, set the same logger name to DEBUG or TRACE in its configuration instead.\nAt trace level look for: Client request received [reqId=..., addr=..., req=...] and Client request processed [reqId=..., dur(mcs)=..., resp=...]; failures log Failed to process client request [req=..., msg=...].",
+        "status": "planned"
+       },
+       "pauseAfter": true
+      }
+     ]
+    },
+    {
+     "id": "c5.d8",
+     "title": "Workflow c: choosing the node for a key, and failover",
+     "phrases": [
+      {
+       "id": "t8.p1",
+       "diagram": "d8-routing-failover",
+       "diagramComponents": [
+        "tcc",
+        "rc",
+        "aff",
+        "nch",
+        "dch"
+       ],
+       "text": "This sequence, drawn from the 2.17.0 code, shows how a key finds its node, and what happens when a node is lost."
+      },
+      {
+       "id": "t8.p3",
+       "diagram": "d8-routing-failover",
+       "diagramComponents": [
+        "rc",
+        "aff",
+        "srv"
+       ],
+       "diagramFocus": [
+        "CACHE_PARTITIONS 1101"
+       ],
+       "text": "If the cache's mapping is missing or older than the last topology, one thread at a time refetches it in its own call; others go without. With no last topology yet, nothing is fetched.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/client/thin/ReliableChannel.java",
+        "start": 437,
+        "end": 486,
+        "anchor": "if (affinityUpdateInProgress.compareAndSet(false, true)) {"
+       }
+      },
+      {
+       "id": "t8.p4",
+       "diagram": "d8-routing-failover",
+       "diagramComponents": [
+        "srv"
+       ],
+       "diagramFocus": [
+        "only PARTITIONED + rendezvous caches"
+       ],
+       "text": "The server maps only partitioned caches with the default rendezvous affinity and no custom key mapper, unless custom mappings are requested.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/processors/platform/client/cache/ClientCachePartitionsRequest.java",
+        "start": 184,
+        "end": 203,
+        "anchor": "Only RendezvousAffinityFunction is supported for now."
+       }
+      },
+      {
+       "id": "t8.p6",
+       "diagram": "d8-routing-failover",
+       "diagramComponents": [
+        "aff"
+       ],
+       "diagramFocus": [
+        "binary key -> partition ->"
+       ],
+       "text": "To place a key, the client converts it to binary and takes its affinity key field, if its type has one configured.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/client/thin/ClientCacheAffinityMapping.java",
+        "start": 86,
+        "end": 108,
+        "anchor": "binaryKey = ((BinaryObjectExImpl)binaryKey).field(fieldId);"
+       }
+      },
+      {
+       "id": "t8.p7",
+       "diagram": "d8-routing-failover",
+       "diagramComponents": [
+        "aff"
+       ],
+       "diagramFocus": [
+        "primary node id (or none)"
+       ],
+       "text": "The default mapper computes the partition with the rendezvous formula, and the map turns the partition into a primary node id.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/client/thin/ClientCacheAffinityMapping.java",
+        "start": 307,
+        "end": 347,
+        "anchor": "RendezvousAffinityFunction.calculatePartition(key, affinityMask, parts);"
+       }
+      },
+      {
+       "id": "t8.p9",
+       "diagram": "d8-routing-failover",
+       "diagramComponents": [
+        "aff"
+       ],
+       "text": "The mapping is used only while a channel to at least one node of the last topology is open.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/client/thin/ClientCacheAffinityContext.java",
+        "start": 318,
+        "end": 331,
+        "anchor": "if (connectionEstablishedPredicate.test(topNode))"
+       }
+      },
+      {
+       "id": "t8.p10",
+       "diagram": "d8-routing-failover",
+       "diagramComponents": [
+        "rc",
+        "nch"
+       ],
+       "diagramFocus": [
+        "service via nodeChannels[node id]"
+       ],
+       "text": "With a node id, the reliable channel uses that node's channel; without one, it chooses a channel as for any other call.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/client/thin/ReliableChannel.java",
+        "start": 911,
+        "end": 935,
+        "anchor": "ClientChannelHolder hld = nodeChannels.get(tryNodeId);"
+       }
+      },
+      {
+       "id": "t8.p11",
+       "diagram": "d8-routing-failover",
+       "diagramComponents": [
+        "rc",
+        "pol",
+        "dch"
+       ],
+       "diagramFocus": [
+        "shouldRetry? (system ops: always)"
+       ],
+       "text": "In a synchronous call, if the node's channel fails, the client records it and, unless one attempt is the limit, asks the retry policy before trying another channel.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/client/thin/ReliableChannel.java",
+        "start": 924,
+        "end": 935,
+        "anchor": "if (attemptsLimit == 1 || !shouldRetry(op, 0, e))"
+       }
+      },
+      {
+       "id": "t8.p12",
+       "diagram": "d8-routing-failover",
+       "diagramComponents": [
+        "nch",
+        "dch"
+       ],
+       "diagramFocus": [
+        "ClientConnectionException"
+       ],
+       "text": "When a server goes away, its channel closes, and every pending request fails with a connection exception: channel is closed.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/client/thin/TcpClientChannel.java",
+        "start": 281,
+        "end": 302,
+        "anchor": "Channel is closed [remoteAddress="
+       }
+      },
+      {
+       "id": "t8.p13",
+       "diagram": "d8-routing-failover",
+       "diagramComponents": [
+        "rc"
+       ],
+       "diagramFocus": [
+        "ClientConnectionException"
+       ],
+       "text": "The reliable channel catches only connection exceptions.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/client/thin/ReliableChannel.java",
+        "start": 862,
+        "end": 889,
+        "anchor": "catch (ClientConnectionException e) {"
+       }
+      },
+      {
+       "id": "t8.p13a",
+       "diagram": "d8-routing-failover",
+       "diagramComponents": [
+        "rc"
+       ],
+       "diagramFocus": [
+        "onChannelFailure: close channel,"
+       ],
+       "text": "For each, it logs channel failure, closes the channel, runs the fail listeners and, if its holder was the default, moves the default on.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/client/thin/ReliableChannel.java",
+        "start": 494,
+        "end": 544,
+        "anchor": "Channel failure [channel="
+       }
+      },
+      {
+       "id": "t8.p15",
+       "diagram": "d8-routing-failover",
+       "diagramComponents": [
+        "pol"
+       ],
+       "diagramFocus": [
+        "ClientRetryPolicy"
+       ],
+       "text": "Then the policy decides: system operations, with no public type, are always retried; public ones only if the policy agrees.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/client/thin/ReliableChannel.java",
+        "start": 951,
+        "end": 964,
+        "anchor": "return true; // System operation."
+       }
+      },
+      {
+       "id": "t8.p16",
+       "diagram": "d8-routing-failover",
+       "diagramComponents": [
+        "pol"
+       ],
+       "diagramFocus": [
+        "(default: retry all)"
+       ],
+       "text": "The default policy agrees to everything, writes included: a put whose connection broke may already be applied, and is sent again on the next attempt, if one remains.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/client/ClientRetryAllPolicy.java",
+        "start": 23,
+        "end": 31,
+        "anchor": "return true;"
+       }
+      },
+      {
+       "id": "t8.p16a",
+       "diagram": "d8-routing-failover",
+       "diagramComponents": [
+        "pol"
+       ],
+       "text": "To limit that, ClientRetryReadPolicy agrees only for reads.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/client/ClientRetryReadPolicy.java",
+        "start": 23,
+        "end": 49,
+        "anchor": "case CACHE_GET:"
+       }
+      },
+      {
+       "id": "t8.p16b",
+       "diagram": "d8-routing-failover",
+       "diagramComponents": [
+        "pol"
+       ],
+       "text": "ClientRetryNonePolicy never agrees; one repeat, described shortly, can still happen before any policy is asked.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/client/ClientRetryNonePolicy.java",
+        "start": 23,
+        "end": 31,
+        "anchor": "return false;"
+       }
+      },
+      {
+       "id": "t8.p17",
+       "diagram": "d8-routing-failover",
+       "diagramComponents": [
+        "rc"
+       ],
+       "diagramFocus": [
+        "attempts = holders, or retryLimit if smaller and above 0;"
+       ],
+       "text": "The number of attempts is the number of holders, or the retry limit when that is above zero and smaller.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/client/thin/ReliableChannel.java",
+        "start": 939,
+        "end": 948,
+        "anchor": "Math.min(clientCfg.getRetryLimit(), size) : size;"
+       }
+      },
+      {
+       "id": "t8.p17a",
+       "diagram": "d8-routing-failover",
+       "diagramComponents": [
+        "rc",
+        "dch"
+       ],
+       "diagramFocus": [
+        "one more with partition awareness and more than one open channel"
+       ],
+       "text": "With partition awareness on and several channels open, the first try goes to a random open channel, with one extra attempt.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/client/thin/ReliableChannel.java",
+        "start": 820,
+        "end": 852,
+        "anchor": "fixedAttemptsLimit++;"
+       }
+      },
+      {
+       "id": "t8.p19",
+       "diagram": "d8-routing-failover",
+       "diagramComponents": [
+        "rc"
+       ],
+       "diagramFocus": [
+        "reset discovery, channelsInit"
+       ],
+       "text": "When the number of failures equals the number of attempts, not counting the extra one, and no channel is open, the client resets discovery to the configured addresses and rebuilds its holders.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/client/thin/ReliableChannel.java",
+        "start": 546,
+        "end": 550,
+        "anchor": "discoveryCtx.reset();"
+       }
+      },
+      {
+       "id": "t8.p21",
+       "diagram": "d8-routing-failover",
+       "diagramComponents": [
+        "rc",
+        "dch"
+       ],
+       "text": "One path differs: in a synchronous call with partition awareness on, if a channel that was already open turns out broken, it is reconnected and the call repeated once; only a further failure reaches the policy.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/client/thin/ReliableChannel.java",
+        "start": 858,
+        "end": 889,
+        "anchor": "same channel and repeat the operation."
+       }
+      },
+      {
+       "id": "t8.p21a",
+       "diagram": "d8-routing-failover",
+       "diagramComponents": [
+        "rc",
+        "dch"
+       ],
+       "text": "Asynchronous calls have no such repeat, and when they cannot connect, they move on to another channel without asking the policy.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/client/thin/ReliableChannel.java",
+        "start": 245,
+        "end": 250,
+        "anchor": "channel -> applyOnClientChannelAsync(fut, channel, op, payloadWriter, payloadReader, failures),"
+       }
+      },
+      {
+       "id": "t8.p22",
+       "text": "Transactions do not fail over: their operations use the transaction's channel, where a connection error ends with transaction context has been lost.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/client/thin/TcpClientCache.java",
+        "start": 1366,
+        "end": 1377,
+        "anchor": "Transaction context has been lost due to connection errors."
+       }
+      }
+     ]
+    },
+    {
+     "id": "c5.i3",
+     "title": "Debugging routing and failover",
+     "phrases": [
+      {
+       "id": "c5.p10",
+       "text": "Breakpoints here: ReliableChannel.applyOnDefaultChannel and onChannelFailure; the action lists the rest and the tests that exercise them.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/client/thin/ReliableChannel.java",
+        "start": 815,
+        "end": 820,
+        "anchor": "private <T> T applyOnDefaultChannel("
+       },
+       "action": {
+        "kind": "test",
+        "where": "a shell in the project root, after the build action",
+        "do": "./mvnw -pl modules/core test -DFORK_COUNT_SET_TO_1 -Dtest=ThinClientPartitionAwarenessStableTopologyTest\n./mvnw -pl modules/core test -DFORK_COUNT_SET_TO_1 -Dtest=ReliabilityTest\nReliabilityTest is parameterized over partition awareness and async calls and stops thin client connections on purpose. Add -Dmaven.surefire.debug to attach a debugger on port 5005, with breakpoints in ReliableChannel.affinityInfoIsUpToDate, applyOnNodeChannelWithFallback, applyOnDefaultChannel, onChannelFailure and shouldRetry. Not yet run.",
+        "status": "needs-approval",
+        "why": "runs multi-node tests"
+       },
+       "pauseAfter": true
+      },
+      {
+       "id": "c5.p10a",
+       "text": "With a client logger, a failed partition map update logs failed to update cache partitions mapping; a success logs at debug level.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/client/thin/ReliableChannel.java",
+        "start": 460,
+        "end": 471,
+        "anchor": "Failed to update cache partitions mapping [cacheId="
+       },
+       "action": {
+        "kind": "log",
+        "where": "the client, configured as in the client log action",
+        "do": "With the client logger set, look for the warnings Channel failure [channel=..., err=...] and Failed to update cache partitions mapping [cacheId=...]. At debug level (root logger and console handler at FINE for new JavaLogger()) also: Cache partitions mapping updated [cacheId=..., nodeId=...], Retrying system operation [op=..., iteration=...] and Retry policy returned ... [op=..., iteration=...]. The connection listener of the client log action reports each closed connection.",
+        "status": "planned"
+       },
+       "pauseAfter": true
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "c6",
+   "title": "Other notes and open questions",
+   "items": [
+    {
+     "id": "c6.i1",
+     "title": "Notes",
+     "phrases": [
+      {
+       "id": "c6.p1",
+       "text": "Some notes. The client's tcpNoDelay setting is copied into each channel's configuration, but never used.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/client/thin/ClientChannelConfiguration.java",
+        "start": 123,
+        "end": 126,
+        "anchor": "this.tcpNoDelay = cfg.isTcpNoDelay();"
+       }
+      },
+      {
+       "id": "c6.p1a",
+       "text": "The client's network layer always turns TCP no-delay on.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/client/thin/io/gridnioserver/GridNioClientConnectionMultiplexer.java",
+        "start": 105,
+        "end": 110,
+        "anchor": ".tcpNoDelay(true)"
+       }
+      },
+      {
+       "id": "c6.p2",
+       "text": "Flow control is loose: the client sets no limit on pending requests.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/client/thin/TcpClientChannel.java",
+        "start": 138,
+        "end": 139,
+        "anchor": "private final Map<Long, ClientRequestFuture> pendingReqs = new ConcurrentHashMap<>();"
+       }
+      },
+      {
+       "id": "c6.p2a",
+       "text": "On the server, only the optional session outbound queue limit, off by default, disconnects a client that reads too slowly.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/processors/odbc/ClientListenerProcessor.java",
+        "start": 175,
+        "end": 178,
+        "anchor": "cliConnCfg.getSessionOutboundMessageQueueLimit() > 0"
+       }
+      },
+      {
+       "id": "c6.p2b",
+       "text": "Once a session's outbound queue reaches that limit, the server closes the session and, when the close succeeds, logs a warning.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/processors/odbc/ClientListenerProcessor.java",
+        "start": 680,
+        "end": 693,
+        "anchor": "srv.close(ses).listen(fut -> {"
+       }
+      },
+      {
+       "id": "c6.p3",
+       "text": "The server's idle timeout is off by default; when set, idle sessions are closed, so clients then need heartbeats.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/processors/odbc/ClientListenerNioListener.java",
+        "start": 286,
+        "end": 289,
+        "anchor": "public void onSessionIdleTimeout(GridNioSession ses)"
+       }
+      },
+      {
+       "id": "c6.p4",
+       "text": "Durability, replication and consistency come from the cache, not the thin client: the put response follows the server's cache call.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/processors/platform/client/cache/ClientCachePutRequest.java",
+        "start": 39,
+        "end": 48,
+        "anchor": "return new ClientResponse(requestId());"
+       }
+      },
+      {
+       "id": "c6.p5",
+       "text": "The thin client's main sources carry no to-do or fix-me markers on either side; one test has a to-do.",
+       "code": {
+        "file": "modules/core/src/test/java/org/apache/ignite/internal/client/thin/ServiceAwarenessTest.java",
+        "start": 391,
+        "end": 392,
+        "anchor": "TODO: IGNITE-20802"
+       }
+      }
+     ]
+    },
+    {
+     "id": "c6.i2",
+     "title": "Open questions and limits of this walk",
+     "phrases": [
+      {
+       "id": "c6.p6",
+       "text": "With heartbeats on and supported by the server, the channel's constructor sets them up.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/client/thin/TcpClientChannel.java",
+        "start": 253,
+        "end": 255,
+        "anchor": "initHeartbeat(cfg.getHeartbeatInterval())"
+       }
+      },
+      {
+       "id": "c6.p6a",
+       "text": "That first asks the server for its idle timeout, and waits for the reply.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/client/thin/TcpClientChannel.java",
+        "start": 925,
+        "end": 942,
+        "anchor": "service(ClientOperation.GET_IDLE_TIMEOUT, null, in -> in.in().readLong());"
+       }
+      },
+      {
+       "id": "c6.p7",
+       "text": "Only after the constructor returns does the reliable channel register as the channel's topology listener.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/client/thin/ReliableChannel.java",
+        "start": 1079,
+        "end": 1082,
+        "anchor": "ClientChannel channel = chFactory.apply(chCfg, connMgr);"
+       }
+      },
+      {
+       "id": "c6.p7b",
+       "text": "The server, though, marks that first reply with the topology flag, because the connection has no last topology version yet, so the flag reaches no listener.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/processors/platform/client/ClientConnectionContext.java",
+        "start": 280,
+        "end": 294,
+        "anchor": "boolean changed = oldVer == null || oldVer.compareTo(newVer) < 0;"
+       }
+      },
+      {
+       "id": "c6.p7a",
+       "text": "By the code, partition awareness then has no last topology, and fetches no partition map until a later response reports a newer topology version; whether this happens in practice is an open question, not yet tested.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/client/thin/ReliableChannel.java",
+        "start": 437,
+        "end": 445,
+        "anchor": "if (lastTop == null)"
+       }
+      },
+      {
+       "id": "c6.p8",
+       "text": "A note on channelsInit: its endpoint branch runs only when no channel is open right after the default one connected, so a normal start skips it.",
+       "code": {
+        "file": "modules/core/src/main/java/org/apache/ignite/internal/client/thin/ReliableChannel.java",
+        "start": 759,
+        "end": 769,
+        "anchor": "if (channelsCnt.get() == 0) {"
+       }
+      },
+      {
+       "id": "c6.p9",
+       "text": "Not covered: the JDBC, ODBC and other language clients; timings and real failover need a running cluster."
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "version": 1
+}

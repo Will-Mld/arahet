@@ -1,0 +1,25 @@
+@startuml d2-source-layout
+title Where the thin-client code lives (drawn from the 2.17.0 source tree)
+package "modules/core, client side" as cside {
+  rectangle "org.apache.ignite.client\nIgniteClient, ClientCache,\nexceptions, retry policies" as papi
+  rectangle "org.apache.ignite.configuration\nClientConfiguration" as ccfg
+  rectangle "internal.client.thin\nTcpIgniteClient, ReliableChannel,\nTcpClientChannel, TcpClientCache" as impl
+  rectangle "internal.client.thin.io\nGridNioServer in client mode" as io
+}
+package "modules/core, server side" as sside {
+  rectangle "org.apache.ignite.configuration\nClientConnectorConfiguration,\nThinClientConfiguration" as scfg
+  rectangle "internal.processors.odbc\nClientListenerProcessor,\nClientListenerNioListener\n(shared with JDBC and ODBC)" as lpkg
+  rectangle "internal.processors.platform.client\nClientConnectionContext, ClientMessageParser,\nClientRequestHandler, request classes" as plat
+}
+package "modules/core/src/test" as tests {
+  rectangle "org.apache.ignite.client\nConnectionTest, ReliabilityTest" as t1
+  rectangle "internal.client.thin\nFunctionalTest, partition awareness tests" as t2
+}
+rectangle "modules/platforms\nC++ and .NET clients (not walked)" as plats
+papi --> impl
+ccfg --> impl
+impl --> io
+io ..> lpkg : TCP
+scfg --> lpkg
+lpkg --> plat
+@enduml

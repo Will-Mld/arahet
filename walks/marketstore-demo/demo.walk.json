@@ -1,0 +1,515 @@
+{
+ "schema": "codewalk-script-v1",
+ "schemaExtensions": {
+  "diagram": "phrase field: id of a diagram in 'diagrams' (PlantUML source + rendered SVG); diagramFocus lists texts to highlight, diagramComponents the named parts to frame",
+  "action": "phrase field: something to run, debug or capture at this point; status 'planned' or 'needs-approval'. The player does not run actions."
+ },
+ "id": "marketstore-demo",
+ "title": "MarketStore in five minutes (view mode)",
+ "project": {
+  "name": "marketstore-v4.1.23",
+  "root": "../../demo/marketstore-v4.1.23",
+  "version": "v4.1.23",
+  "commit": "007586568aa92a1c83189b3c06843dc27a23e5b3",
+  "committed": "2022-11-07",
+  "obtain": "python3 bootstrap.py demo: a git checkout of exactly this commit (the original github.com/alpacahq/marketstore is gone; public copies of it serve the commit), or the Go module github.com/alpacahq/marketstore/v4 v4.1.23 from the Go module mirror; both checked against the Go checksum database",
+  "licence": "Apache-2.0"
+ },
+ "operator": {
+  "task": "A short demo of the full MarketStore walk, played in view mode (no IDE, no stops at chapter ends): the environment, the on-disk layout, and the write path with its code.",
+  "guidance": "Cut of walks/marketstore/marketstore.walk.json made with codewalk's apply_patch: 31 phrases kept (27 as before plus the parts the 2026-11-15 review fixes split off), one opening and one closing phrase added.",
+  "audience": "anyone seeing codewalk for the first time"
+ },
+ "author": "Claude Code (claude-opus-5-5), written by reading the source and docs/design on 2026-11-12; the narrated schemas added 2026-11-14",
+ "diagrams": {
+  "d1-context": {
+   "title": "MarketStore in its environment",
+   "source": "../marketstore/assets/d1-context.puml",
+   "svg": "../marketstore/assets/svg/d1-context.svg"
+  },
+  "d2-on-disk": {
+   "title": "On-disk layout and year file format",
+   "source": "../marketstore/assets/d2-on-disk.puml",
+   "svg": "../marketstore/assets/svg/d2-on-disk.svg"
+  },
+  "d3-write-path": {
+   "title": "Write path",
+   "source": "../marketstore/assets/d3-write-path.puml",
+   "svg": "../marketstore/assets/svg/d3-write-path.svg"
+  }
+ },
+ "defaults": {
+  "gapMs": 600
+ },
+ "chapters": [
+  {
+   "id": "c1",
+   "title": "Overview: what it does for the business",
+   "items": [
+    {
+     "id": "c1.i1",
+     "title": "What it is",
+     "phrases": [
+      {
+       "id": "demo.p0",
+       "text": "This is a five-minute view of MarketStore, Alpaca's open-source database for financial time series. The voice explains, the code and the schemas follow, and after Play nothing needs to be pressed."
+      },
+      {
+       "id": "c1.p1",
+       "diagram": "d1-context",
+       "diagramFocus": [
+        "MarketStore server process"
+       ],
+       "text": "MarketStore is Alpaca's open-source database server for financial time series: price bars and ticks over many years, for all US equities and for crypto.",
+       "code": {
+        "file": "README.md",
+        "start": 8,
+        "end": 12,
+        "anchor": "database server optimized for financial time-series data"
+       },
+       "diagramComponents": [
+        "MarketStore server process"
+       ]
+      }
+     ]
+    },
+    {
+     "id": "c1.d1",
+     "title": "Schema: MarketStore in its environment",
+     "phrases": [
+      {
+       "id": "t1.p1",
+       "diagram": "d1-context",
+       "diagramComponents": [
+        "MarketStore server process"
+       ],
+       "text": "This schema shows MarketStore in its environment: who talks to it, and where the data lives."
+      },
+      {
+       "id": "t1.p2",
+       "diagram": "d1-context",
+       "diagramComponents": [
+        "user",
+        "py",
+        "cli",
+        "gc",
+        "ws"
+       ],
+       "text": "The client group contains the Python client, pymarketstore, a command-line shell, gRPC clients, and WebSocket subscribers. gRPC is a remote procedure call framework."
+      },
+      {
+       "id": "t1.p3",
+       "diagram": "d1-context",
+       "diagramComponents": [
+        "rpc",
+        "grpc",
+        "wsh",
+        "met"
+       ],
+       "text": "The server listens on JSON-RPC at port 5993 and on gRPC at port 5995, and it offers a stream endpoint for WebSockets and Prometheus metrics. JSON-RPC is another remote procedure call protocol, served here over HTTP."
+      },
+      {
+       "id": "t1.p4",
+       "diagram": "d1-context",
+       "diagramComponents": [
+        "eng",
+        "disk"
+       ],
+       "diagramFocus": [
+        "symbol/timeframe/attribute/year.bin",
+        "+ WAL file"
+       ],
+       "text": "Inside, one engine handles both queries and writes. Everything is stored under one data directory: a file per symbol, timeframe, attribute group and year, plus the write-ahead log."
+      },
+      {
+       "id": "t1.p5",
+       "diagram": "d1-context",
+       "diagramComponents": [
+        "vendor",
+        "bg",
+        "trg"
+       ],
+       "text": "Vendor data arrives through background-worker plugins. Configured triggers react asynchronously to normal writes; crash-WAL replay does not rerun them."
+      },
+      {
+       "id": "t1.p6",
+       "diagram": "d1-context",
+       "diagramComponents": [
+        "rep"
+       ],
+       "diagramFocus": [
+        "WAL transaction groups"
+       ],
+       "text": "Replicas receive live WAL transaction groups over gRPC, normally port 5996. Their client-write restrictions have gaps in this release."
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "c3",
+   "title": "Main design ideas, requirements and assumptions",
+   "items": [
+    {
+     "id": "c3.d2",
+     "title": "Schema: on-disk layout",
+     "phrases": [
+      {
+       "id": "t2.p1",
+       "diagram": "d2-on-disk",
+       "diagramComponents": [
+        "data",
+        "sym",
+        "tf",
+        "ag"
+       ],
+       "text": "On disk, everything sits under the root directory, as a tree of folders: symbol, then timeframe, then attribute group."
+      },
+      {
+       "id": "t2.p2",
+       "diagram": "d2-on-disk",
+       "diagramComponents": [
+        "f2017",
+        "f2018",
+        "wal"
+       ],
+       "text": "At the bottom of the tree there is one file per year, for example 2017 dot bin. The write-ahead log file lives at the top."
+      },
+      {
+       "id": "t2.p3",
+       "diagram": "d2-on-disk",
+       "diagramComponents": [
+        "hdr"
+       ],
+       "text": "Each year file starts with a fixed header of 37,024 bytes that describes its columns."
+      },
+      {
+       "id": "t2.p4",
+       "diagram": "d2-on-disk",
+       "diagramComponents": [
+        "r1",
+        "rn"
+       ],
+       "diagramFocus": [
+        "index int64"
+       ],
+       "text": "Fixed records occupy indexed slots. Variable records instead use 24-byte indirect slots pointing to payload data."
+      },
+      {
+       "id": "t2.p5",
+       "diagram": "d2-on-disk",
+       "diagramComponents": [
+        "holes"
+       ],
+       "text": "Intervals that were never written are holes in the file. Their index is zero, and the reader skips them."
+      },
+      {
+       "id": "t2.p6",
+       "diagram": "d2-on-disk",
+       "diagramFocus": [
+        "offset = header + (index - 1) * record length",
+        "(time - Jan 1 00:00) / timeframe"
+       ],
+       "text": "Time selects the initial slot directly. Range reads still scan buffered slots and skip holes; variable data needs a second-stage read."
+      }
+     ]
+    },
+    {
+     "id": "c3.i2",
+     "title": "Idea 1: one file per series and year, positions computed from time",
+     "phrases": [
+      {
+       "id": "c3.p4",
+       "diagram": "d2-on-disk",
+       "diagramFocus": [
+        "(time - Jan 1 00:00) / timeframe"
+       ],
+       "text": "The 2016 design defines resolution as intervals per day. Intraday slot positions derive from time, rather than a search index.",
+       "code": {
+        "file": "docs/design/file_format_design.txt",
+        "start": 39,
+        "end": 48,
+        "anchor": "Resolution is defined as number of time intervals stored per day"
+       },
+       "diagramComponents": [
+        "f2017",
+        "r1"
+       ]
+      },
+      {
+       "id": "c3.p5",
+       "diagram": "d2-on-disk",
+       "diagramFocus": [
+        "offset = header + (index - 1) * record length",
+        "(time - Jan 1 00:00) / timeframe"
+       ],
+       "text": "Intraday indexes count timeframes since January first, plus one. The daily branch instead uses day-of-year minus one; January first maps to zero, an important boundary concern.",
+       "code": {
+        "file": "utils/io/timeindex.go",
+        "start": 32,
+        "end": 44,
+        "anchor": "YearDay() - 1"
+       },
+       "diagramComponents": [
+        "hdr",
+        "r1",
+        "rn"
+       ]
+      },
+      {
+       "id": "c3.p5a",
+       "text": "IndexToOffset subtracts one before multiplying by record length and adding the header size. For a daily January first, index zero, that offset lands in the last bytes of the header.",
+       "code": {
+        "file": "utils/io/timeindex.go",
+        "start": 50,
+        "end": 56,
+        "anchor": "return (index-1)*int64(recordSize) + Headersize"
+       }
+      },
+      {
+       "id": "c3.p5b",
+       "text": "The reader skips every slot whose index is zero, so January first in a daily file is never returned. This is read from the code, not observed in a run.",
+       "code": {
+        "file": "executor/scanner.go",
+        "start": 454,
+        "end": 463,
+        "anchor": "if indexuint64 != 0 {"
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "c5",
+   "title": "Workflows: call hierarchy, debug points, logs",
+   "items": [
+    {
+     "id": "c5.d3",
+     "title": "Schema: write path",
+     "phrases": [
+      {
+       "id": "t2.p7",
+       "diagram": "d3-write-path",
+       "diagramComponents": [
+        "C",
+        "F"
+       ],
+       "diagramFocus": [
+        "/rpc Write(MultiWriteRequest, msgpack)"
+       ],
+       "text": "The write path starts with a client sending a write request to the JSON-RPC endpoint."
+      },
+      {
+       "id": "t2.p8",
+       "diagram": "d3-write-path",
+       "diagramComponents": [
+        "F",
+        "W"
+       ],
+       "diagramFocus": [
+        "WriteCSM(ColumnSeriesMap, isVariableLength)"
+       ],
+       "text": "The data service hands the columns to the writer's WriteCSM."
+      },
+      {
+       "id": "t2.p9",
+       "diagram": "d3-write-path",
+       "diagramComponents": [
+        "W",
+        "CAT"
+       ],
+       "diagramFocus": [
+        "GetLatestTimeBucketInfoFromKey",
+        "check data shapes, coerce types,"
+       ],
+       "text": "The writer finds the series in the catalog, or creates its directories and file, then checks and converts the data."
+      },
+      {
+       "id": "t2.p10",
+       "diagram": "d3-write-path",
+       "diagramFocus": [
+        "WriteRecords: TimeToIndex, IndexToOffset",
+        "WriteCommand + QueueWriteCommand (channel)"
+       ],
+       "text": "Writer.WriteRecords computes indexes and offsets, then queues the grouped commands in the WAL channel."
+      },
+      {
+       "id": "t2.p11",
+       "diagram": "d3-write-path",
+       "diagramComponents": [
+        "S"
+       ],
+       "diagramFocus": [
+        "RequestFlush(): wait unless flush already queued",
+        "flushChannel",
+        "FlushToWAL()"
+       ],
+       "text": "RequestFlush usually waits for a requested flush. An already queued request returns immediately; without a background writer it flushes synchronously. Flush errors are logged, not propagated."
+      },
+      {
+       "id": "t2.p12",
+       "diagram": "d3-write-path",
+       "diagramComponents": [
+        "WF"
+       ],
+       "diagramFocus": [
+        "TI(WAL, PREPARING)",
+        "MID TGDATA + TG length + TG + MD5",
+        "TI(WAL, COMMITCOMPLETE) + fsync"
+       ],
+       "text": "The group goes into the WAL file: a prepare marker, the data with an MD5 checksum, and a commit marker, followed by an fsync."
+      },
+      {
+       "id": "t2.p13",
+       "diagram": "d3-write-path",
+       "diagramComponents": [
+        "R",
+        "P"
+       ],
+       "diagramFocus": [
+        "Send(TG) to replicas",
+        "writePrimary: WriteAt(offset, index+payload)",
+        "(overwrite slot; page cache, no fsync here)"
+       ],
+       "text": "After WAL fsync, replication is enqueued and primary writes begin. Fixed records overwrite slots; variable records merge payloads through an indirect slot."
+      },
+      {
+       "id": "t2.p14",
+       "diagram": "d3-write-path",
+       "diagramComponents": [
+        "T",
+        "C"
+       ],
+       "diagramFocus": [
+        "AppendRecord + DispatchRecords",
+        "MultiServerResponse"
+       ],
+       "text": "Normal flush dispatches triggers asynchronously. Client success does not unconditionally prove durability or completed derived updates."
+      }
+     ]
+    },
+    {
+     "id": "c5.i2",
+     "title": "W2 Write",
+     "phrases": [
+      {
+       "id": "c5.p10",
+       "diagram": "d3-write-path",
+       "diagramFocus": [
+        "/rpc Write(MultiWriteRequest, msgpack)",
+        "WriteCSM(ColumnSeriesMap, isVariableLength)"
+       ],
+       "text": "Scenario two is a write. The client sends a msgpack write request to slash rpc. DataService Write converts each dataset and calls WriteCSM.",
+       "code": {
+        "file": "frontend/write.go",
+        "start": 36,
+        "end": 46,
+        "anchor": "req.Data.ToColumnSeriesMap()"
+       },
+       "action": {
+        "kind": "debug",
+        "where": "IDEA",
+        "do": "Optional debugger check in the full MarketStore walk: set breakpoints at DataService.Write, Writer.WriteCSM, WALFileType.FlushCommandsToWAL and writePrimary. Follow that walk's debug build, Delve and remote CWDEMO fixture instructions before running it.",
+        "status": "needs-approval",
+        "why": "needs the debug build and Delve"
+       },
+       "diagramComponents": [
+        "C",
+        "F",
+        "W"
+       ]
+      },
+      {
+       "id": "c5.p11",
+       "diagram": "d3-write-path",
+       "diagramFocus": [
+        "GetLatestTimeBucketInfoFromKey",
+        "(or AddTimeBucket: create dirs + file)"
+       ],
+       "text": "WriteCSM looks the series up in the catalog, or, on a first write, creates its directories and its year file.",
+       "code": {
+        "file": "executor/writer.go",
+        "start": 285,
+        "end": 321,
+        "anchor": "Created By Writer"
+       },
+       "diagramComponents": [
+        "W",
+        "CAT"
+       ]
+      },
+      {
+       "id": "c5.p14",
+       "diagram": "d3-write-path",
+       "diagramFocus": [
+        "FlushToWAL()",
+        "TI(WAL, PREPARING)"
+       ],
+       "text": "FlushToWAL drains the queue into one transaction group and writes the prepare marker.",
+       "code": {
+        "file": "executor/wal.go",
+        "start": 226,
+        "end": 261,
+        "anchor": "WAL Transaction Preparing Message"
+       },
+       "diagramComponents": [
+        "S",
+        "WF"
+       ]
+      },
+      {
+       "id": "c5.p15",
+       "diagram": "d3-write-path",
+       "diagramFocus": [
+        "MID TGDATA + TG length + TG + MD5",
+        "TI(WAL, COMMITCOMPLETE) + fsync",
+        "Send(TG) to replicas",
+        "writePrimary: WriteAt(offset, index+payload)",
+        "AppendRecord + DispatchRecords"
+       ],
+       "text": "Normal flush writes the group, checksum and commit marker, then fsyncs the WAL. Replication and primary writes follow; trigger records are dispatched even after a logged primary-write failure.",
+       "code": {
+        "file": "executor/wal.go",
+        "start": 263,
+        "end": 340,
+        "anchor": "defer wf.tpd.DispatchRecords()"
+       },
+       "diagramComponents": [
+        "WF",
+        "R",
+        "P",
+        "T"
+       ]
+      },
+      {
+       "id": "c5.p15a",
+       "text": "Variable writes read existing payload, optionally decompress it, and append incoming events before sorting.",
+       "code": {
+        "file": "executor/writer.go",
+        "start": 195,
+        "end": 226,
+        "anchor": "dataToBeWritten = append(oldData, dataToBeWritten...)"
+       }
+      },
+      {
+       "id": "c5.p15b",
+       "text": "They sort by timestamp, optionally Snappy-compress, write the merged tail payload, and update the indirect index/offset/length slot.",
+       "code": {
+        "file": "executor/writer.go",
+        "start": 223,
+        "end": 257,
+        "anchor": "targetRecInfo := IndirectRecordInfo"
+       }
+      },
+      {
+       "id": "demo.p99",
+       "text": "That was the view mode. The full walk has six chapters and about thirty-seven minutes. In it you can pause, ask a question at any place, or press D to stop and discuss, and the walk is amended and continues where you were."
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "version": 1
+}

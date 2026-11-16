@@ -1,0 +1,23 @@
+@startuml
+title codewalk in its context
+skinparam shadowing false
+skinparam defaultFontSize 13
+left to right direction
+rectangle "Creation prompt\npurpose, depth, order,\npresentation" as prompt
+rectangle "Coding agent session\nClaude Code, Codex" as agent
+rectangle "Walk script\nJSON, versioned,\nwith a change log" as walk
+rectangle "codewalk player\nlocal server and page" as player
+rectangle "Listener\nengineer, reviewer,\nnewcomer" as listener
+rectangle "IntelliJ IDEA\n(optional)" as ide
+rectangle "Azure Speech\nyour own key" as azure
+rectangle "Walked project\nyour copy of its code" as project
+prompt --> agent : instructs
+agent --> walk : writes, amends
+walk --> player : is played
+player --> listener : voice, code, schema
+listener --> player : pause, ask,\nstop and discuss
+player --> agent : notes, questions
+player --> ide : file and line
+player --> azure : text to speech
+player --> project : reads lines
+@enduml

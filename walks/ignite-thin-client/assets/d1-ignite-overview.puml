@@ -1,0 +1,30 @@
+@startuml d1-ignite-overview
+title Apache Ignite 2.17.0 at the top level (drawn from the 2.17.0 code)
+skinparam componentStyle rectangle
+package "Ignite cluster" as cluster {
+  node "Server node" as srv {
+    component "Discovery\nTcpDiscoverySpi by default\n(default port 47500)" as disc
+    component "Communication\nTcpCommunicationSpi by default\n(default port 47100)" as comm
+    component "Caches, SQL, compute, services" as data
+    component "Native persistence\n(off unless enabled)" as pers
+    component "Client connector\n(default port 10800)" as conn
+    component "REST over HTTP\n(only with the rest-http module;\nJetty port 8080 by default)" as rest
+  }
+  node "Other server nodes" as others
+  node "Thick client node\n(client mode)" as thick
+}
+rectangle "Java thin client\nIgnition.startClient" as thin
+rectangle "JDBC thin driver" as jdbc
+rectangle "ODBC driver" as odbc
+rectangle "HTTP client" as http
+thin --> conn : thin client protocol\n(client type 2)
+jdbc --> conn : client type 1
+odbc --> conn : client type 0
+http --> rest
+thick --> srv : joins through discovery
+srv <--> others : discovery and\ncommunication
+note bottom of thin
+  Not a cluster node: it opens its own TCP
+  connections to client connectors.
+end note
+@enduml

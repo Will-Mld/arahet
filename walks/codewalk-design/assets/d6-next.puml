@@ -1,0 +1,29 @@
+@startuml
+title What comes next
+skinparam shadowing false
+skinparam defaultFontSize 13
+left to right direction
+skinparam rectangle {
+  BackgroundColor<<now>> #E8F1FB
+  BackgroundColor<<next>> #F2F2F2
+}
+rectangle "Today\nwalk folders with relative paths,\nversions, change logs, prompts/" as today <<now>>
+rectangle "Walks kept in Git\nbeside the code they explain" as git <<next>>
+rectangle "Discovery\nthe player lists a repository's walks" as discovery <<next>>
+rectangle "Editor authoring\nchange a phrase where you read it" as editor <<next>>
+rectangle "Creation prompts as files\nchosen per walk" as prompts <<next>>
+rectangle "Walk export (no audio)\nreferences; optional code" as export <<now>>
+rectangle "Source pinned to a Git reference;\ndrift reported while playing" as pin <<next>>
+rectangle "RUP cycle\nwalks follow its phases\nand artefacts" as rup <<next>>
+rectangle "Planned actions run\non approval" as actions <<next>>
+rectangle "Change review mode\nGit baseline, coverage check" as review <<next>>
+today --> git
+today --> discovery
+today --> editor
+today --> prompts
+today --> export
+today --> pin
+today --> rup
+today --> actions
+today --> review
+@enduml

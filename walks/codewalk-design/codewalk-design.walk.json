@@ -1,0 +1,534 @@
+{
+ "schema": "codewalk-script-v1",
+ "id": "codewalk-design",
+ "version": 1,
+ "title": "codewalk: the design, walked through its own code",
+ "project": {
+  "name": "codewalk",
+  "root": "../.."
+ },
+ "operator": {
+  "task": "Explain how codewalk works by walking through its own code and schemas: purpose, pieces, script format, playing, the stop-discuss-amend loop, and what comes next.",
+  "guidance": "Lead with the two strengths named by the author: the pluggable creation prompt and the REPL-style editing of a walk. One schema per chapter; code pointers into this repository.",
+  "audience": "an engineer who wants to use, extend or review codewalk"
+ },
+ "author": "Claude Code (claude-opus-5-5) for the author, 2026-11-14",
+ "diagrams": {
+  "d1-context": {
+   "title": "codewalk in its context",
+   "source": "assets/d1-context.puml",
+   "svg": "assets/svg/d1-context.svg"
+  },
+  "d2-architecture": {
+   "title": "The pieces",
+   "source": "assets/d2-architecture.puml",
+   "svg": "assets/svg/d2-architecture.svg"
+  },
+  "d3-script": {
+   "title": "The walk script",
+   "source": "assets/d3-script.puml",
+   "svg": "assets/svg/d3-script.svg"
+  },
+  "d4-states": {
+   "title": "The player's states",
+   "source": "assets/d4-states.puml",
+   "svg": "assets/svg/d4-states.svg"
+  },
+  "d5-repl": {
+   "title": "Stop, discuss, amend, continue",
+   "source": "assets/d5-repl.puml",
+   "svg": "assets/svg/d5-repl.svg"
+  },
+  "d6-next": {
+   "title": "What comes next",
+   "source": "assets/d6-next.puml",
+   "svg": "assets/svg/d6-next.svg"
+  }
+ },
+ "defaults": {
+  "gapMs": 700
+ },
+ "chapters": [
+  {
+   "id": "x1",
+   "title": "What codewalk is for",
+   "items": [
+    {
+     "id": "x1.i1",
+     "title": "A walk, and who makes it",
+     "phrases": [
+      {
+       "id": "x.p1",
+       "text": "This walk explains codewalk by walking through its own code. codewalk plays a walk: a script of short phrases, each spoken aloud, each showing the code it talks about or a part of a schema.",
+       "diagram": "d1-context",
+       "diagramComponents": [
+        "walk",
+        "player",
+        "listener"
+       ]
+      },
+      {
+       "id": "x.p2",
+       "text": "A walk is usually written by a coding agent from a creation prompt. The prompt sets the purpose, the depth, the order and the presentation. That is the first strength of the product: the same player serves an onboarding tour, an architecture review or the story of one change, because the prompt decides.",
+       "diagram": "d1-context",
+       "diagramComponents": [
+        "prompt",
+        "agent"
+       ]
+      },
+      {
+       "id": "x.p3",
+       "text": "While the walk plays, the listener can pause, ask a question at the current place, or stop and discuss. The second strength follows: the walk is edited in a loop, like a REPL. Amend, validate, reload, and continue where the listener was.",
+       "diagram": "d1-context",
+       "diagramComponents": [
+        "listener",
+        "player",
+        "agent"
+       ]
+      },
+      {
+       "id": "x.p4",
+       "text": "The voice comes from Azure Speech, with your own key. The code comes from your own copy of the walked project; a walk stores only file names, line numbers and a few words to find each place again.",
+       "diagram": "d1-context",
+       "diagramComponents": [
+        "azure",
+        "project",
+        "ide"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "x2",
+   "title": "The pieces",
+   "items": [
+    {
+     "id": "x2.i1",
+     "title": "One process and its parts",
+     "phrases": [
+      {
+       "id": "x.p5",
+       "text": "Everything runs in one Python program, codewalk dot py, with the standard library only. It serves a page on this machine and owns the state of the walk.",
+       "diagram": "d2-architecture",
+       "diagramComponents": [
+        "server",
+        "playerc"
+       ],
+       "code": {
+        "file": "codewalk.py",
+        "start": 573,
+        "end": 584,
+        "anchor": "class Player:"
+       }
+      },
+      {
+       "id": "x.p6",
+       "text": "The page shows the caption, the code card and the schema card, and sends every key and button back to the server. It never decides on its own where the walk is.",
+       "diagram": "d2-architecture",
+       "diagramComponents": [
+        "page",
+        "api"
+       ],
+       "code": {
+        "file": "page.html",
+        "start": 812,
+        "end": 815,
+        "anchor": "case 'pause': if (cur.kind"
+       }
+      },
+      {
+       "id": "x.p7",
+       "text": "Speech is cached: a clip is made once for each voice and text, so a changed walk only costs the phrases that changed.",
+       "diagram": "d2-architecture",
+       "diagramComponents": [
+        "speech"
+       ],
+       "code": {
+        "file": "codewalk.py",
+        "start": 362,
+        "end": 373,
+        "anchor": "def clip_paths("
+       }
+      },
+      {
+       "id": "x.p8",
+       "text": "IntelliJ IDEA follows through its launcher. In safe mode it moves only while IDEA is in front, so nothing typed elsewhere can land in the code.",
+       "diagram": "d2-architecture",
+       "diagramComponents": [
+        "idebridge"
+       ],
+       "code": {
+        "file": "codewalk.py",
+        "start": 555,
+        "end": 571,
+        "anchor": "def navigate_ide("
+       }
+      },
+      {
+       "id": "x.p9",
+       "text": "A question typed on the page can be answered at once by a short headless Claude call that sees the current phrase, its code and its schema.",
+       "diagram": "d2-architecture",
+       "diagramComponents": [
+        "helper"
+       ],
+       "code": {
+        "file": "codewalk.py",
+        "start": 1325,
+        "end": 1340,
+        "anchor": "def helper_context("
+       }
+      },
+      {
+       "id": "x.p10",
+       "text": "From outside, a session drives the player with the command line or over MCP: tools from play and goto to wait, discuss and reload.",
+       "diagram": "d2-architecture",
+       "diagramComponents": [
+        "mcp",
+        "ctl",
+        "api"
+       ],
+       "code": {
+        "file": "mcp_server.py",
+        "start": 18,
+        "end": 31,
+        "anchor": "TOOLS = ["
+       }
+      },
+      {
+       "id": "x.p11",
+       "text": "bootstrap dot py checks the machine, downloads MarketStore or Apache Ignite, verifies MarketStore with Go's checksum database and Ignite with its pinned tree checksum, prepares the key file and registers MCP.",
+       "diagram": "d2-architecture",
+       "diagramComponents": [
+        "bootstrap"
+       ],
+       "code": {
+        "file": "bootstrap.py",
+        "start": 446,
+        "end": 496,
+        "anchor": "def cmd_demo("
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "x3",
+   "title": "The walk script",
+   "items": [
+    {
+     "id": "x3.i1",
+     "title": "Format and validation",
+     "phrases": [
+      {
+       "id": "x.p12",
+       "text": "A walk script is JSON: chapters, topics and phrases. The contents panel shows exactly this tree.",
+       "diagram": "d3-script",
+       "diagramComponents": [
+        "walk",
+        "chapter",
+        "topic",
+        "phrase"
+       ],
+       "code": {
+        "file": "codewalk.py",
+        "start": 122,
+        "end": 137,
+        "anchor": "def load_script("
+       }
+      },
+      {
+       "id": "x.p13",
+       "text": "A phrase can point at code: a file, a line range and an anchor, a few words copied from that place. The project root may be relative to the walk file, so a walk travels with its repository.",
+       "diagram": "d3-script",
+       "diagramComponents": [
+        "pointer"
+       ]
+      },
+      {
+       "id": "x.p14",
+       "text": "Or it shows a schema rendered from PlantUML, with the components it names framed and its texts highlighted. The names are the aliases written in the PlantUML source.",
+       "diagram": "d3-script",
+       "diagramComponents": [
+        "schemaref",
+        "diagrams"
+       ],
+       "code": {
+        "file": "codewalk.py",
+        "start": 232,
+        "end": 253,
+        "anchor": "def diagram_components("
+       }
+      },
+      {
+       "id": "x.p15",
+       "text": "validate checks every phrase before anything plays: each anchor must still be in its lines, and each component name must exist in the rendered schema. A walk that fails is not loaded.",
+       "diagram": "d3-script",
+       "diagramComponents": [
+        "validate"
+       ],
+       "code": {
+        "file": "codewalk.py",
+        "start": 146,
+        "end": 175,
+        "anchor": "def validate("
+       }
+      },
+      {
+       "id": "x.p16",
+       "text": "Two more fields: an action, such as a build, a debug session or a log to capture, which is planned but never run by the player; and pause after, which makes the walk wait for the listener, as the guide does.",
+       "diagram": "d3-script",
+       "diagramComponents": [
+        "action",
+        "pauseafter"
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "x4",
+   "title": "Playing",
+   "items": [
+    {
+     "id": "x4.i1",
+     "title": "From phrase to phrase",
+     "phrases": [
+      {
+       "id": "x.p17",
+       "text": "Playing a phrase means one token, one clip and one event to the page. The token makes late events from an older phrase harmless.",
+       "diagram": "d4-states",
+       "diagramComponents": [
+        "idle",
+        "playing"
+       ],
+       "code": {
+        "file": "codewalk.py",
+        "start": 940,
+        "end": 965,
+        "anchor": "def start_phrase("
+       }
+      },
+      {
+       "id": "x.p18",
+       "text": "When a clip ends, the server waits the gap and moves on. At a chapter end it waits for the listener, unless the walk runs in view mode.",
+       "diagram": "d4-states",
+       "diagramComponents": [
+        "playing",
+        "chapterend"
+       ],
+       "code": {
+        "file": "codewalk.py",
+        "start": 969,
+        "end": 1008,
+        "anchor": "def advance("
+       }
+      },
+      {
+       "id": "x.p19",
+       "text": "A question pauses the walk, the answer is spoken, and the walk returns to where it was. Escape stops a long answer.",
+       "diagram": "d4-states",
+       "diagramComponents": [
+        "answering"
+       ],
+       "code": {
+        "file": "codewalk.py",
+        "start": 1127,
+        "end": 1134,
+        "anchor": "if cmd == \"stop-answer\""
+       }
+      },
+      {
+       "id": "x.p20",
+       "text": "The position is saved with the audio offset, so after a restart Play continues in the middle of the sentence.",
+       "diagram": "d4-states",
+       "diagramComponents": [
+        "paused",
+        "finished"
+       ],
+       "code": {
+        "file": "codewalk.py",
+        "start": 896,
+        "end": 908,
+        "anchor": "def save_position("
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "x5",
+   "title": "Stop, discuss, amend, continue",
+   "items": [
+    {
+     "id": "x5.i1",
+     "title": "The loop",
+     "phrases": [
+      {
+       "id": "x.p21",
+       "text": "This is the loop. The listener presses D and writes a note, or says it.",
+       "diagram": "d5-repl",
+       "diagramComponents": [
+        "L",
+        "G"
+       ]
+      },
+      {
+       "id": "x.p22",
+       "text": "The server saves a bookmark, with the walk, its version, the phrase and the audio offset, and puts the note in the session's inbox.",
+       "diagram": "d5-repl",
+       "diagramComponents": [
+        "P"
+       ],
+       "code": {
+        "file": "codewalk.py",
+        "start": 1198,
+        "end": 1209,
+        "anchor": "def discuss("
+       }
+      },
+      {
+       "id": "x.p23",
+       "text": "The session waits on ctl wait or on the MCP tool, so it is told at once, without polling. Listener and session talk it over in the session's own chat.",
+       "diagram": "d5-repl",
+       "diagramComponents": [
+        "S",
+        "L"
+       ]
+      },
+      {
+       "id": "x.p24",
+       "text": "The agreed change is a patch: replace a text, set a code pointer, insert or delete phrases, topics or chapters, or retitle.",
+       "diagram": "d5-repl",
+       "diagramComponents": [
+        "S",
+        "F"
+       ],
+       "code": {
+        "file": "codewalk.py",
+        "start": 1780,
+        "end": 1809,
+        "anchor": "def apply_patch("
+       }
+      },
+      {
+       "id": "x.p25",
+       "text": "amend writes the next version beside the old one, validates it, never overwrites a file, and adds a line to the change log with the reason and the listener's own words.",
+       "diagram": "d5-repl",
+       "diagramComponents": [
+        "F"
+       ],
+       "code": {
+        "file": "codewalk.py",
+        "start": 1827,
+        "end": 1857,
+        "anchor": "def amend("
+       }
+      },
+      {
+       "id": "x.p26",
+       "text": "reload maps the bookmark onto the new version. An unchanged phrase continues from its offset, a changed one is played again, a deleted one gives way to the next, and phrases inserted just before it play first.",
+       "diagram": "d5-repl",
+       "diagramComponents": [
+        "P"
+       ],
+       "code": {
+        "file": "codewalk.py",
+        "start": 1210,
+        "end": 1239,
+        "anchor": "def reload("
+       }
+      },
+      {
+       "id": "x.p27",
+       "text": "Corrections made earlier in the walk can be played before continuing. Then the walk goes on at the listener's place.",
+       "diagram": "d5-repl",
+       "diagramComponents": [
+        "G",
+        "P"
+       ],
+       "code": {
+        "file": "codewalk.py",
+        "start": 1285,
+        "end": 1306,
+        "anchor": "def continue_after_discussion("
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "x6",
+   "title": "What comes next",
+   "items": [
+    {
+     "id": "x6.i1",
+     "title": "The next version",
+     "phrases": [
+      {
+       "id": "x.p28",
+       "text": "Next, walks are kept in Git beside the code they explain, and the player finds them when a repository is opened.",
+       "diagram": "d6-next",
+       "diagramComponents": [
+        "today",
+        "git",
+        "discovery"
+       ]
+      },
+      {
+       "id": "x.p29",
+       "text": "Authoring moves into the editor, so a phrase can be changed where it is read.",
+       "diagram": "d6-next",
+       "diagramComponents": [
+        "editor"
+       ]
+      },
+      {
+       "id": "x.p30",
+       "text": "Creation prompts become files chosen per walk. This repository starts with one, in prompts, create walk.",
+       "diagram": "d6-next",
+       "diagramComponents": [
+        "prompts"
+       ]
+      },
+      {
+       "id": "x.p31",
+       "text": "Export keeps the walk and diagrams, with source references by default, optional permitted code, and no audio. Source drift reporting during playback is still planned.",
+       "diagram": "d6-next",
+       "diagramComponents": [
+        "export",
+        "pin"
+       ]
+      },
+      {
+       "id": "x.p32",
+       "text": "Integration with the Rational Unified Process cycle lets walks follow its phases and artefacts.",
+       "diagram": "d6-next",
+       "diagramComponents": [
+        "rup"
+       ]
+      },
+      {
+       "id": "x.p33",
+       "text": "Later come planned actions run on approval, and a change-review mode built on a Git baseline.",
+       "diagram": "d6-next",
+       "diagramComponents": [
+        "actions",
+        "review"
+       ]
+      },
+      {
+       "id": "x.p34",
+       "text": "That is the end of the design walk. Press D at any point to tell its author what to change."
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

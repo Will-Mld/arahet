@@ -1,0 +1,25 @@
+# codewalk focus watcher: prints one JSON line whenever the foreground program changes (read-only; never changes
+# focus). Only the process name and id are read - no window titles, so nothing private ends up in the logs.
+Add-Type @"
+using System; using System.Runtime.InteropServices; using System.Text;
+public class CwFocus {
+  [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+  [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
+}
+"@
+$last = ''
+$beat = Get-Date
+while ($true) {
+  $h = [CwFocus]::GetForegroundWindow()
+  $fpid = [uint32]0
+  [void][CwFocus]::GetWindowThreadProcessId($h, [ref]$fpid)
+  $name = ''
+  try { $name = (Get-Process -Id $fpid -ErrorAction Stop).ProcessName } catch { $name = '?' }
+  $key = "$fpid|$name"
+  if ($key -ne $last -or ((Get-Date) - $beat).TotalSeconds -ge 10) {
+    $o = @{ pid = $fpid; proc = $name; beat = ($key -eq $last) } | ConvertTo-Json -Compress
+    [Console]::WriteLine($o); [Console]::Out.Flush()
+    $last = $key; $beat = Get-Date
+  }
+  Start-Sleep -Milliseconds 150
+}

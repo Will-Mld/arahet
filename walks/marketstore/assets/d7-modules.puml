@@ -1,0 +1,36 @@
+@startuml d7-modules
+title D7 - Packages and their main dependencies (core only)
+skinparam packageStyle rectangle
+package "cmd (CLI: start, connect, init, estimate, tool)" as cmd
+package "internal/di (wiring container)" as di
+package "frontend (JSON-RPC, gRPC, stream API)" as fe
+package "planner (which files / ranges)" as pl
+package "executor (writer, WAL, replay, reader)" as ex
+package "catalog (directory tree)" as cat
+package "utils/io (keys, data shapes, column series, time index)" as uio
+package "sqlparser + uda (SQL subset, aggregates)" as sql
+package "plugins (trigger, bgworker loading)" as plg
+package "replication (WAL shipping over gRPC)" as rep
+package "contrib (feeders, ondiskagg, stream ...)" as contrib
+package "metrics, utils/log" as obs
+cmd --> di
+cmd --> fe
+di --> fe
+di --> ex
+di --> cat
+di --> rep
+di --> plg
+fe --> pl
+fe --> ex
+fe --> sql
+pl --> cat
+ex --> cat
+ex --> uio
+ex --> plg
+cat --> uio
+rep --> ex
+contrib ..> plg : implements
+contrib ..> ex : writes via WriteCSM
+fe --> obs
+ex --> obs
+@enduml

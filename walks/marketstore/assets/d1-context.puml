@@ -1,0 +1,45 @@
+@startuml d1-context
+title D1 - MarketStore in its environment (v4.1.23)
+skinparam componentStyle rectangle
+actor "Researcher / trading app" as user
+node "Clients" {
+  [pymarketstore (Python)] as py
+  [marketstore connect (CLI)] as cli
+  [gRPC client] as gc
+  [WebSocket subscriber] as ws
+}
+node "MarketStore server process" {
+  [JSON-RPC /rpc :5993] as rpc
+  [gRPC API :5995] as grpc
+  [Stream /ws] as wsh
+  [Prometheus /metrics] as met
+  [Query + write engine\n(frontend, planner, executor)] as eng
+  [Background workers (plugins)\nAlpaca, Polygon, IEX, crypto feeds] as bg
+  [Triggers (plugins)\nondiskagg, stream] as trg
+}
+database "data/ (root_directory)\nsymbol/timeframe/attribute/year.bin\n+ WAL file" as disk
+node "Replica instance(s)" as rep
+cloud "Market data vendors" as vendor
+user --> py
+py --> rpc : query / write (msgpack)
+cli --> rpc
+gc --> grpc
+ws --> wsh
+rpc --> eng
+grpc --> eng
+eng --> disk
+bg --> eng : write bars / ticks
+vendor --> bg
+eng --> trg : asynchronous normal-write triggers
+trg --> wsh : latest row; larger timeframes delayed
+eng --> rep : WAL transaction groups\n(gRPC stream :5996)
+note bottom of rpc
+  Data HTTP/gRPC APIs have no built-in TLS/authentication here.
+  Configure listen addresses and a trusted external boundary.
+  Optional replication TLS protects a separate service.
+end note
+note bottom of rep
+  Live shipping, no initial snapshot or catch-up cursor.
+  HTTP Write is guarded; gRPC Write and catalog mutation have gaps.
+end note
+@enduml

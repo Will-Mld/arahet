@@ -1,0 +1,24 @@
+@startuml
+title The player's states
+skinparam shadowing false
+skinparam defaultFontSize 13
+state "idle" as idle
+state "playing" as playing
+state "paused" as paused
+state "chapter end" as chapterend
+state "discussing" as discussing
+state "answering" as answering
+state "finished" as finished
+[*] --> idle
+idle --> playing : Play\n(from the saved position)
+playing --> paused : Space, or pauseAfter
+paused --> playing : Space
+playing --> chapterend : end of a chapter\n(not in view mode)
+chapterend --> playing : Continue
+playing --> answering : question
+answering --> playing : answer spoken
+playing --> discussing : D, stop and discuss
+discussing --> playing : Continue\n(after reload: mapped place)
+playing --> finished : last phrase
+finished --> playing : Play
+@enduml

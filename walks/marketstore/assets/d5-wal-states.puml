@@ -1,0 +1,34 @@
+@startuml d5-wal-states
+title D5 - Implemented WAL file status and normal transaction processing (v4.1.23)
+state "WAL file status {FileStatus, ReplayState}" as WS {
+  state "{1,1} OPEN, NOT REPLAYED\nactive file or shutdown" as s11
+  state "{1,3} OPEN, REPLAY IN PROCESS" as s13
+  state "{1,2} OPEN, REPLAYED" as s12
+  state "{2,2} CLOSED, REPLAYED" as s22
+  [*] --> s11 : new WAL file created at start-up
+  s11 --> s11 : shutdown with background sync:\nflush + checkpoint; no header state change
+  s11 --> s13 : initialization finds old file\n(WALCleaner -> Replay)
+  s13 --> s12 : replay done (not dry-run)
+  s12 --> s22 : Delete closes replayed file
+  s22 --> [*] : old file removed
+}
+state "Normal transaction group (TG) processing" as TG {
+  state "TI WAL PREPARING" as p
+  state "TG data + MD5" as d
+  state "TI WAL COMMITCOMPLETE\nWAL fsync" as c
+  state "written to primary files\n(page cache; errors logged)" as pr
+  state "CHECKPOINT: syncfs\nTI CHECKPOINT COMMITCOMPLETE" as ck
+  [*] --> p
+  p --> d
+  d --> c
+  c --> pr
+  pr --> ck : five-minute attempt if pending
+}
+note bottom of TG
+  Replay removes data covered by completed checkpoints, then
+  replays remaining TG data. Collected WAL commit states
+  are not used as a replay filter.
+  Variable-record duplicate append is a source-derived risk;
+  reproduce and verify recovery idempotence.
+end note
+@enduml

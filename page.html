@@ -1,0 +1,994 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Code walk</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cpath d='M23 17 L25.5 7 L29 13 L32 5 L35 13 L38.5 7 L41 17 Z' fill='%237a0c22'/%3E%3Ccircle cx='32' cy='38' r='23' fill='%23b3123a' stroke='%23ffd6de' stroke-width='2'/%3E%3Cpath d='M23 17 h18 v4 a9 3 0 0 1 -18 0 z' fill='%237a0c22'/%3E%3Cpolyline points='21,46 30,32 37,44 44,30' fill='none' stroke='%23ffe3e8' stroke-width='3.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cg fill='%23fff'%3E%3Ccircle cx='21' cy='46' r='4.4'/%3E%3Ccircle cx='30' cy='32' r='4.4'/%3E%3Ccircle cx='37' cy='44' r='4.4'/%3E%3Ccircle cx='44' cy='30' r='4.4'/%3E%3C/g%3E%3C/svg%3E">
+<style>
+:root {
+  --bg: #f6f7f9; --panel: #ffffff; --ink: #1d2330; --muted: #5d6677; --line: #d9dee7;
+  --accent: #2f5fd0; --accent-ink: #ffffff; --hit: #fff1b8; --hit-ink: #1d2330; --code-bg: #f2f4f8;
+  --ok: #1d7f45; --warn: #a15c00; --bad: #b3261e; --chip: #e8edf7;
+  --paper: #ffffff; --shade: rgba(12, 15, 20, .72);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14171d; --panel: #1c2028; --ink: #e6e9ef; --muted: #9aa3b2; --line: #2e3440;
+    --accent: #6d93ff; --accent-ink: #0d1017; --hit: #4a3f12; --hit-ink: #fff6d6; --code-bg: #161a21;
+    --ok: #5fcf8d; --warn: #f0b35a; --bad: #ff8a80; --chip: #273042;
+    --paper: #eef1f5; --shade: rgba(4, 6, 9, .8);
+  }
+}
+[hidden] { display: none !important; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.45 "Segoe UI", system-ui, sans-serif; }
+main { max-width: 920px; margin: 0 auto; padding: 14px 16px 40px; display: grid; gap: 12px;
+       grid-template-columns: minmax(0, 1fr); }
+main > * { min-width: 0; }
+header { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: baseline; }
+/* table of contents: docked on wide windows (T or the button hides it), a drawer on narrower ones */
+.shell { display: grid; grid-template-columns: minmax(0, 1fr); }
+#toc { display: none; background: var(--panel); border-right: 1px solid var(--line); padding: 10px 8px 28px; font-size: 13.5px; }
+@media (min-width: 1300px) {
+  body:not(.toc-off) .shell { grid-template-columns: 300px minmax(0, 1fr); }
+  body:not(.toc-off) #toc { display: block; position: sticky; top: 0; height: 100vh; overflow: auto; }
+}
+@media (max-width: 1299.98px) {
+  body.toc-open #toc { display: block; position: fixed; z-index: 30; left: 0; top: 0; bottom: 0; width: min(340px, 88vw);
+                       overflow: auto; box-shadow: 0 0 28px rgba(0, 0, 0, .3); }
+}
+.tocbtn { font-size: 13px; padding: 3px 10px; align-self: center; }
+.toc-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 2px 6px 6px; }
+.toc-head b { font-size: 14px; }
+.toc-head .muted { font-size: 12px; }
+.toc-head button { border: 0; background: none; color: var(--muted); font-size: 18px; line-height: 1; padding: 2px 6px; cursor: pointer; border-radius: 6px; }
+.toc-ch { margin: 14px 6px 4px; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); font-weight: 600; }
+.toc-row { display: flex; align-items: flex-start; gap: 2px; }
+.toc-tw { flex: none; width: 24px; height: 28px; border: 0; background: none; color: var(--muted); cursor: pointer; border-radius: 6px; padding: 0; font-size: 16px; line-height: 1; }
+.toc-title { flex: 1; min-width: 0; text-align: left; border: 0; background: none; color: var(--ink); padding: 5px 6px; border-radius: 6px; cursor: pointer; font: inherit; }
+.toc-count { flex: none; color: var(--muted); font-size: 12px; padding: 6px 6px 0 0; font-variant-numeric: tabular-nums; }
+.toc-tw:hover, .toc-title:hover, .toc-ph:hover, .toc-head button:hover { background: var(--chip); }
+.toc-item.cur > .toc-row .toc-title { color: var(--accent); font-weight: 600; }
+.toc-item:not(.open) > .toc-phs { display: none; }
+.toc-phs { list-style: none; margin: 0 0 6px 22px; padding: 0; }
+.toc-ph { display: flex; gap: 6px; width: 100%; text-align: left; border: 0; border-left: 3px solid transparent; background: none;
+          color: var(--muted); padding: 3px 6px; border-radius: 0 6px 6px 0; cursor: pointer; font: inherit; font-size: 12.5px; line-height: 1.35; }
+.toc-ph .n { flex: none; min-width: 2em; font-variant-numeric: tabular-nums; }
+.toc-ph .t { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.toc-ph.cur { background: var(--chip); color: var(--ink); border-left-color: var(--accent); font-weight: 600; }
+button:disabled { opacity: .45; cursor: default; }
+/* Stop & discuss note box */
+#discussbox { border-color: var(--accent); }
+#discussbox label { display: block; margin-bottom: 6px; }
+#dnote { width: 100%; font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; resize: vertical; }
+#discussbox .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 8px; }
+button.link { background: none; border-color: transparent; color: var(--muted); text-decoration: underline; }
+button.rec, #talk.rec { background: var(--bad); color: var(--panel); border-color: var(--bad); }
+/* who answers questions */
+#listeners { margin-top: 6px; }
+#listeners.none { color: var(--warn); }
+/* zoom to focus */
+.zoomlbl { font-size: 13px; color: var(--muted); display: inline-flex; gap: 5px; align-items: center; margin-right: 8px; cursor: pointer; }
+.diaghead-right { display: inline-flex; align-items: center; }
+h1 { font-size: 17px; margin: 0; font-weight: 600; }
+.pill { font-size: 12px; padding: 2px 9px; border-radius: 99px; background: var(--chip); color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.pill.playing { background: var(--accent); color: var(--accent-ink); }
+.pill.chapter-end, .pill.answering { background: var(--warn); color: var(--panel); }
+.where { color: var(--muted); font-size: 13px; width: 100%; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+#caption { font-size: 21px; line-height: 1.4; min-height: 3em; }
+.codehead { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; color: var(--muted); margin-bottom: 6px; flex-wrap: wrap; }
+.codehead b { color: var(--ink); font-family: Consolas, "Cascadia Mono", monospace; font-weight: 600; }
+.nav-ok { color: var(--ok); } .nav-bad { color: var(--bad); }
+pre { margin: 0; background: var(--code-bg); border-radius: 8px; padding: 8px 0; overflow: auto; max-height: 34vh; font: 13px/1.5 Consolas, "Cascadia Mono", monospace; }
+pre div { padding: 0 12px; white-space: pre; }
+pre div.hit { background: var(--hit); color: var(--hit-ink); }
+pre span.n { display: inline-block; width: 3.2em; color: var(--muted); user-select: none; }
+.controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+button, select, input { font: inherit; color: var(--ink); }
+button { background: var(--chip); border: 1px solid var(--line); border-radius: 8px; padding: 7px 12px; cursor: pointer; }
+button:hover { border-color: var(--accent); }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); min-width: 96px; }
+select, input[type=text] { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; }
+label { font-size: 13px; color: var(--muted); display: inline-flex; gap: 6px; align-items: center; }
+.spacer { flex: 1; }
+#banner { display: none; border-color: var(--warn); }
+#banner.show { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.ask { display: flex; gap: 8px; flex-wrap: wrap; }
+.ask input { flex: 1; min-width: 220px; }
+#talk.rec { background: var(--bad); color: var(--panel); border-color: var(--bad); }
+.qa { display: grid; gap: 10px; }
+.q { font-weight: 600; } .a { margin-top: 4px; }
+.tag { font-size: 11px; color: var(--muted); border: 1px solid var(--line); border-radius: 6px; padding: 0 5px; margin-left: 6px; font-weight: 400; }
+.outline { display: flex; flex-wrap: wrap; gap: 6px; }
+.outline button { font-size: 13px; padding: 4px 9px; }
+.outline button.cur { border-color: var(--accent); color: var(--accent); }
+#msg { font-size: 13px; color: var(--bad); min-height: 1em; }
+#actiondetails { white-space: pre-wrap; padding: 10px 12px; overflow-wrap: anywhere; }
+.muted { color: var(--muted); font-size: 13px; }
+/* diagrams: PlantUML SVGs are drawn for a light page, so they sit on a light "paper" in both themes */
+.diagbox { background: var(--paper); border: 1px solid var(--line); border-radius: 8px; max-height: 46vh; overflow: auto; width: 100%; }
+.diagbox svg, .ovbody svg { display: block; }
+#diagcard.dim .diagbox { opacity: .5; }
+#codecard[hidden] ~ #diagcard .diagbox { max-height: 74vh; }   /* no code card (diagram-only phrase): give the diagram the room */
+body.diagram-walk main { max-width: 1480px; }   /* a walk without code pointers: room for wide diagrams */
+.codehead button { font-size: 12px; padding: 3px 9px; }
+svg .cw-hl { fill: rgba(255, 207, 51, .6); stroke: #b27b00; stroke-width: 1.5; }
+svg .cw-hl-text { font-weight: 700; }
+svg rect.cw-comp { fill: rgba(37, 99, 235, .10); stroke: #2563eb; stroke-width: 3; pointer-events: none; }   /* named component */
+svg .cw-comp-line { stroke: #2563eb !important; stroke-width: 2.5 !important; }                         /* its lifeline */
+#overlay { position: fixed; inset: 0; z-index: 50; background: var(--shade); display: flex; flex-direction: column; }
+.ovbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 16px;
+         background: var(--panel); color: var(--ink); border-bottom: 1px solid var(--line); margin-bottom: 12px; }
+.ovbody { flex: 0 1 auto; min-height: 0; overflow: auto; background: var(--paper); margin: 0 16px 16px; border-radius: 8px; }
+#diagtitle { font-family: inherit; }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+</head>
+<body>
+<div class="shell">
+<nav id="toc" aria-label="Contents">
+  <div class="toc-head"><span><b>Contents</b> <span class="muted" id="toccount"></span></span>
+    <button id="bTocClose" title="Hide contents (T)" aria-label="Hide contents">×</button></div>
+  <div id="toclist"></div>
+</nav>
+<main>
+  <header>
+    <button id="bToc" class="tocbtn" title="Show or hide the contents (T)">☰ Contents</button>
+    <h1 id="title">Code walk</h1><span id="status" class="pill">connecting</span><span id="ver" class="pill">v1</span><span id="role" class="pill" hidden></span>
+    <div class="where" id="where"></div>
+  </header>
+
+  <div class="card"><div id="caption" aria-live="polite">Press Play to start.</div></div>
+
+  <div class="card controls" role="toolbar" aria-label="Playback">
+    <button id="bPrevCh" title="Previous chapter (Shift+Left)">⏮ Chapter</button>
+    <button id="bPrevIt" title="Previous topic ([)">⏮ Topic</button>
+    <button id="bPrev" title="Previous phrase (Left)">◀ Phrase</button>
+    <button id="bPlay" class="primary" title="Play / pause (Space)">▶ Play</button>
+    <button id="bNext" title="Next phrase (Right)">Phrase ▶</button>
+    <button id="bNextIt" title="Next topic (])">Topic ⏭</button>
+    <button id="bNextCh" title="Next chapter (Shift+Right)">Chapter ⏭</button>
+    <button id="bDiscuss" title="Stop and discuss in your session (D). Text in the question box is sent as a note.">✋ Stop &amp; discuss</button>
+    <span class="spacer"></span>
+    <label>Speed <select id="speed"><option>0.75</option><option selected>1</option><option>1.25</option><option>1.5</option><option>2</option></select></label>
+    <label>Voice <select id="voice"></select></label>
+    <label title="Safe: IDEA moves only while IDEA is in front, so typing in another window never lands in code">IDEA follows
+      <select id="follow"><option value="safe">when IDEA is in front</option><option value="always">always (takes focus)</option></select></label>
+    <label title="What to do when IDEA is not running">If IDEA is closed
+      <select id="idestart"><option value="ask">offer to start it</option><option value="auto">start it (once)</option><option value="never">leave it</option></select></label>
+  </div>
+
+  <div class="card" id="discussbox" hidden role="dialog" aria-labelledby="dlabel">
+    <label for="dnote" id="dlabel"><b>Stop &amp; discuss</b> <span class="muted">· what do you want to discuss? The walk stops
+      here and your note goes to the session.</span></label>
+    <textarea id="dnote" rows="3" placeholder="Type your note (Enter sends, Shift+Enter new line), or hold the microphone button and speak"></textarea>
+    <div class="row">
+      <button id="dTalk" title="Hold and speak; the words are added to the note">🎙 Hold to speak</button>
+      <span class="muted" id="dmsg"></span><span class="spacer"></span>
+      <button id="dCancel" title="Close and carry on (Esc)">Cancel</button>
+      <button id="dNoNote" class="link">Stop without a note</button>
+      <button id="dSend" class="primary" disabled>Stop &amp; send</button>
+    </div>
+  </div>
+
+  <div class="card" id="banner"><span id="bannerText"></span><span class="spacer"></span>
+    <button id="bReplay" hidden>Replay corrections first</button>
+    <button id="bSkip" hidden>Continue without them</button>
+    <button id="bContinue" class="primary">Continue ▶</button></div>
+
+  <div class="card" id="actioncard" hidden aria-label="Manual action">
+    <div class="codehead"><b>Manual action</b><span class="pill" id="actionstatus"></span></div>
+    <pre id="actiondetails"></pre>
+    <div class="muted">Instructions only; execution stays manual.</div>
+  </div>
+
+  <div class="card" id="codecard" hidden>
+    <div class="codehead"><span><b id="codefile"></b> <span id="coderange"></span></span><span id="navinfo"></span></div>
+    <pre id="code"></pre>
+  </div>
+
+  <div class="card" id="diagcard" hidden>
+    <div class="codehead"><span><b id="diagtitle"></b> <span id="diagnote"></span></span>
+      <span class="diaghead-right"><label class="zoomlbl" title="Zoom to the highlighted part of the diagram (Z)">
+        <input type="checkbox" id="zoomFocus"> Zoom to focus</label>
+      <button id="bExpand" title="Show the diagram full size (X)">⤢ Full size</button></span></div>
+    <div class="diagbox" id="diagbox" aria-label="Diagram for this phrase"></div>
+  </div>
+
+  <div class="card">
+    <div class="ask">
+      <input type="text" id="qtext" placeholder="Ask about this part of the code (Q)" aria-label="Question">
+      <button id="bAsk">Ask</button>
+      <button id="talk" title="Hold to ask by voice">🎙 Hold to ask</button>
+    </div>
+    <div id="msg"></div>
+    <div class="muted" id="listeners"></div>
+    <div class="qa" id="qa"></div>
+  </div>
+
+</main>
+</div>
+<div id="overlay" hidden role="dialog" aria-modal="true" aria-labelledby="ovtitle">
+  <div class="ovbar"><b id="ovtitle"></b><button id="bClose" title="Close (Esc)">Close ✕</button></div>
+  <div class="ovbody" id="ovbox"></div>
+</div>
+<script>
+const H = {'Content-Type': 'application/json', 'X-Codewalk': '1'};
+const $ = id => document.getElementById(id);
+// one open page plays the sound (the one clicked last); every page shows the walk
+const PAGE_ID = Math.random().toString(36).slice(2, 12) || 'page';
+let soundClaim = 0;   // when this page was last clicked: it owns the sound until the server confirms ('sound-page')
+const mine = s => !s || !s.soundPage || s.soundPage === PAGE_ID || Date.now() - soundClaim < 3000;
+const ELSEWHERE = 'the sound plays in another window · press Play to hear it here';
+const post = (p, o) => fetch(p, {method: 'POST', headers: H, body: JSON.stringify({...o, pageId: PAGE_ID})}).then(r => r.json()).catch(e => ({ok: false, error: String(e)}));
+const cmd = (c, args = {}) => (soundClaim = Date.now(), post('/api/cmd', {cmd: c, args, source: 'page'}).then(r => { if (r && r.ok === false) $('msg').textContent = r.error || 'failed'; return r; }));
+
+const audio = new Audio();
+addEventListener('pagehide', () => { if (!SNAPSHOT && state.soundPage === PAGE_ID)
+  fetch('/api/page', {method: 'POST', headers: H, keepalive: true, body: JSON.stringify({event: 'page-closing', pageId: PAGE_ID})}); });
+audio.preservesPitch = true;
+let cur = {kind: null, token: null, phraseId: null, startedReported: false, startedAt: 0};
+let state = {}, outline = null, questions = new Map();
+let reconnectClip = false;   // a fresh page restores the phrase, then waits for an explicit Play gesture
+
+function report(event, extra = {}) {
+  post('/api/page', {event, kind: cur.kind, token: cur.token, phraseId: cur.phraseId, rate: audio.playbackRate,
+    currentTime: Math.round(audio.currentTime * 1000) / 1000, duration: isFinite(audio.duration) ? audio.duration : null, ...extra});
+}
+audio.addEventListener('playing', () => {
+  if (!cur.startedReported) { cur.startedReported = true; cur.startedAt = performance.now(); report('audio-started'); }
+  else report('audio-resumed');
+});
+audio.addEventListener('ended', () => report('audio-ended', {wallMs: Math.round(performance.now() - cur.startedAt)}));
+audio.addEventListener('pause', () => { if (!audio.ended) report('audio-paused'); });
+audio.addEventListener('error', () => report('audio-error'));
+
+function playClip(kind, token, url, phraseId, autoplay, startAt) {
+  reconnectClip = false;
+  cur = {kind, token, phraseId, startedReported: false, startedAt: 0};
+  audio.src = url;
+  audio.playbackRate = state.rate || 1;
+  const go = () => { if (autoplay) audio.play().catch(e => kind === 'phrase' ? soundBlocked(token, e) : report('audio-blocked', {error: String(e)})); };
+  if (startAt > 0) {
+    audio.addEventListener('loadedmetadata', () => { audio.currentTime = Math.min(startAt, Math.max(0, audio.duration - 0.2)); go(); }, {once: true});
+  } else go();
+}
+// Browsers refuse sound that does not follow a click in the page, e.g. when Play came from the command line or an
+// agent before anyone clicked here: show Play again, so the next click starts this phrase inside the gesture.
+function soundBlocked(token, e) {
+  if (cur.kind !== 'phrase' || cur.token !== token) return;
+  reconnectClip = true; setState(state);
+  $('role').hidden = false; $('role').textContent = 'the browser blocked the sound · press Play to hear it';
+  report('audio-blocked', {error: String(e)});
+}
+let lastMapping = null;
+
+function setState(s) {
+  if (!s) return;
+  state = s;
+  if (s.soundPage === PAGE_ID) soundClaim = 0;
+  if (!mine(s) && cur.kind !== null && audio.src && !audio.paused) {   // the sound moved to another page
+    audio.pause();
+    if (cur.kind === 'phrase') { reconnectClip = true; $('role').hidden = false; $('role').textContent = ELSEWHERE; }
+  }
+  if (reconnectClip && (cur.token !== s.token || !["playing", "paused"].includes(s.status) || s.resumeAt)) reconnectClip = false;
+  const st = $('status'); st.textContent = s.status; st.className = 'pill ' + s.status;
+  $('where').textContent = `Chapter ${s.chapterIndex + 1}/${s.chapters} · ${s.chapterTitle} › ${s.itemTitle} · phrase ${s.index + 1}/${s.total}`;
+  $('bPlay').textContent = reconnectClip ? '▶ Play' : s.status === 'playing' ? '❚❚ Pause' : s.status === 'answering' ? '■ Stop answer' : '▶ Play';
+  $('bPlay').title = s.status === 'answering' ? 'Stop the spoken answer (Space or Esc)' : 'Play / pause (Space)';
+  $('bNextCh').disabled = s.chapterIndex + 1 >= s.chapters;
+  $('bNextCh').title = $('bNextCh').disabled ? 'Already in the last chapter (Topic ⏭ still moves on)' : 'Next chapter (Shift+Right)';
+  $('bNextIt').disabled = s.items !== undefined && s.itemIndex + 1 >= s.items;
+  $('bNextIt').title = $('bNextIt').disabled ? 'Already in the last topic' : 'Next topic (])';
+  $('speed').value = String(s.rate);
+  if (s.ideFollow === 'off') $('follow').closest('label').hidden = true;
+  else if (s.ideFollow) $('follow').value = s.ideFollow;
+  if (s.ideStart === 'off') $('idestart').closest('label').hidden = true;
+  else if (s.ideStart) $('idestart').value = s.ideStart;
+  if ($('voice').options.length) $('voice').value = s.voice;
+  $('ver').textContent = 'v' + (s.version || 1);
+  renderListeners(s);
+  const banner = $('banner');
+  const corr = (s.corrections || []).length;
+  $('bReplay').hidden = $('bSkip').hidden = !corr;
+  $('bContinue').hidden = !!corr;
+  if (corr) $('bReplay').textContent = `Replay ${corr} corrected ${corr === 1 ? 'phrase' : 'phrases'} first`;
+  const waiting = s.status === 'discussing' || (s.status === 'paused' && s.resumeAt);
+  if (waiting) {
+    banner.classList.add('show');
+    let t;
+    if (lastMapping && s.resumeAt) {
+      const m = lastMapping, n = (a) => a.length;
+      t = `Walk updated to v${m.to}: ${n(m.changed)} changed, ${n(m.inserted)} new, ${n(m.deleted)} removed. ` +
+          `Continues at ${s.resumeAt} ${s.resumeMode === 'offset' ? 'where you stopped' : 'from its start'}.`;
+      if (corr) t += ` ${corr} earlier ${corr === 1 ? 'phrase was' : 'phrases were'} corrected: ${s.corrections.join(', ')}.`;
+    } else {
+      t = `Paused for discussion in your session${s.discussNote ? ` (“${s.discussNote}”)` : ''}. The walk will continue from ${s.bookmark || s.phraseId}.`;
+    }
+    $('bannerText').textContent = t;
+  } else if (s.status === 'chapter-end' || s.status === 'finished') {
+    banner.classList.add('show');
+    $('bannerText').textContent = s.status === 'finished' ? 'The walk is finished. Ask a question, or pick a chapter to replay.'
+      : `Chapter ${s.chapterIndex + 1} “${s.chapterTitle}” is done. Ask a question, or continue.`;
+    $('bContinue').hidden = s.status === 'finished';
+  } else banner.classList.remove('show');
+  document.querySelectorAll('#outline button').forEach((b, i) => b.classList.toggle('cur', i === s.chapterIndex));
+}
+
+function renderOutline(o) {
+  document.body.classList.toggle('diagram-walk', o.codePointers === 0);
+  outline = o; $('title').textContent = o.title; document.title = o.title;
+  $('voice').innerHTML = o.voices.map(v => `<option>${v}</option>`).join('');
+  renderToc(o);
+}
+
+// ---- table of contents (side panel): chapters -> items -> phrases; click = jump there
+const tocWide = matchMedia('(min-width: 1300px)');
+let tocCur = {phrase: null, item: null};
+const tocOpened = new Set();   // items the viewer opened by hand stay open
+try { if (localStorage.getItem('codewalk.tocOff') === '1') document.body.classList.add('toc-off'); } catch (e) { /* no storage */ }
+function tocShown() { return $('toc').offsetParent !== null || getComputedStyle($('toc')).display !== 'none'; }
+function toggleToc(force) {
+  if (tocWide.matches) {
+    const off = force === undefined ? !document.body.classList.contains('toc-off') : !force;
+    document.body.classList.toggle('toc-off', off);
+    try { localStorage.setItem('codewalk.tocOff', off ? '1' : '0'); } catch (e) { /* no storage */ }
+  } else {
+    document.body.classList.toggle('toc-open', force === undefined ? undefined : force);
+  }
+  if (tocShown() && tocCur.phrase) markToc(tocCur.phrase);
+}
+function setItemOpen(box, open) {
+  box.classList.toggle('open', open);
+  const tw = box.querySelector('.toc-tw');
+  tw.textContent = open ? '▾' : '▸'; tw.setAttribute('aria-expanded', String(open));
+}
+function tocGo(pid) {
+  cmd('goto', {phrase: pid});
+  if (!tocWide.matches) document.body.classList.remove('toc-open');
+}
+function renderToc(o) {
+  const list = $('toclist'); list.replaceChildren();
+  $('toccount').textContent = `· ${o.phrases} phrases`;
+  o.chapters.forEach((c, ci) => {
+    const h = document.createElement('div'); h.className = 'toc-ch'; h.textContent = `${ci + 1}. ${c.title}`; list.appendChild(h);
+    (c.items || []).forEach(it => {
+      const box = document.createElement('div'); box.className = 'toc-item'; box.dataset.item = it.id;
+      const row = document.createElement('div'); row.className = 'toc-row';
+      const tw = document.createElement('button'); tw.className = 'toc-tw'; tw.title = 'Show or hide its phrases';
+      tw.onclick = () => { const open = !box.classList.contains('open'); setItemOpen(box, open);
+                           open ? tocOpened.add(it.id) : tocOpened.delete(it.id); };
+      const t = document.createElement('button'); t.className = 'toc-title'; t.textContent = it.title;
+      t.dataset.itemGoto = it.id; t.title = 'Play this topic from its start'; t.onclick = () => tocGo(it.firstPhrase);
+      const n = document.createElement('span'); n.className = 'toc-count'; n.textContent = it.phrases.length;
+      row.append(tw, t, n);
+      const ol = document.createElement('ol'); ol.className = 'toc-phs';
+      it.phrases.forEach(p => {
+        const li = document.createElement('li'), b = document.createElement('button');
+        b.className = 'toc-ph'; b.dataset.goto = p.id; b.title = p.text;
+        const num = document.createElement('span'); num.className = 'n'; num.textContent = p.n;
+        const tx = document.createElement('span'); tx.className = 't'; tx.textContent = p.text;
+        b.append(num, tx); b.onclick = () => tocGo(p.id);
+        li.appendChild(b); ol.appendChild(li);
+      });
+      box.append(row, ol); list.appendChild(box);
+      setItemOpen(box, tocOpened.has(it.id));
+    });
+  });
+  const pid = tocCur.phrase; tocCur = {phrase: null, item: null};
+  if (pid) markToc(pid);
+}
+// mark the current phrase, open its item (closing the item opened only for the previous phrase), keep it in view
+function markToc(pid) {
+  const list = $('toclist'), toc = $('toc');
+  list.querySelectorAll('.toc-ph.cur').forEach(b => { b.classList.remove('cur'); b.removeAttribute('aria-current'); });
+  const b = list.querySelector(`.toc-ph[data-goto="${CSS.escape(pid)}"]`);
+  if (!b) return {inView: false, shown: tocShown()};
+  b.classList.add('cur'); b.setAttribute('aria-current', 'step');
+  const box = b.closest('.toc-item');
+  if (tocCur.item !== box.dataset.item) {
+    const prev = tocCur.item && list.querySelector(`.toc-item[data-item="${CSS.escape(tocCur.item)}"]`);
+    if (prev) { prev.classList.remove('cur'); if (!tocOpened.has(tocCur.item)) setItemOpen(prev, false); }
+    box.classList.add('cur'); setItemOpen(box, true);
+  }
+  tocCur = {phrase: pid, item: box.dataset.item};
+  const shown = tocShown();
+  if (!shown) return {inView: false, shown};
+  let tr = toc.getBoundingClientRect(), r = b.getBoundingClientRect();
+  const out = r.top < tr.top + 40 || r.bottom > tr.bottom - 20;
+  if (out && !toc.matches(':hover')) {   // never fight the viewer's own scrolling in the panel
+    toc.scrollTop += r.top - tr.top - tr.height / 3;
+    tr = toc.getBoundingClientRect(); r = b.getBoundingClientRect();
+  }
+  return {inView: r.top >= tr.top && r.bottom <= tr.bottom, shown};
+}
+$('bToc').onclick = () => toggleToc();
+$('bTocClose').onclick = () => toggleToc(false);
+// test hook (?tocclick=t2.d3,t2.p13): click those contents entries one after another, as a viewer would
+const TOCCLICK = (new URLSearchParams(location.search).get('tocclick') || '').split(',').filter(Boolean);
+let tocClicksDone = false;
+function runTocClicks() {
+  if (tocClicksDone || !TOCCLICK.length) return;
+  tocClicksDone = true;
+  TOCCLICK.forEach((v, i) => setTimeout(() => {
+    const el = document.querySelector(`[data-goto="${CSS.escape(v)}"], [data-item-goto="${CSS.escape(v)}"]`);
+    const r = el && el.getBoundingClientRect();
+    post('/api/page', {event: 'toc-test-click', target: v, found: !!el, visible: !!(r && r.width && r.height)});
+    if (el) el.click();
+  }, 1500 + i * 4000));
+}
+
+function renderCode(code, nav) {
+  if (!code) { $('codecard').hidden = true; return; }
+  $('codecard').hidden = false;
+  $('codefile').textContent = code.file;
+  $('coderange').textContent = code.start === code.end ? `line ${code.start}` : `lines ${code.start}–${code.end}`;
+  $('code').innerHTML = '';
+  for (const l of code.lines) {
+    const d = document.createElement('div'); if (l.hit) d.className = 'hit';
+    const n = document.createElement('span'); n.className = 'n'; n.textContent = l.n;
+    d.appendChild(n); d.appendChild(document.createTextNode(l.text.replace(/\t/g, '    ')));
+    $('code').appendChild(d);
+  }
+  const firstHit = $('code').querySelector('.hit');   // long ranges: keep the start of the range in view
+  if (firstHit) $('code').scrollTop = Math.max(0, firstHit.offsetTop - $('code').offsetTop - 24);
+  renderNav(nav);
+}
+function renderNav(nav) {
+  const ni = $('navinfo');
+  ni.replaceChildren();
+  if (!nav) { ni.className = ''; return; }
+  if (nav.ok) {
+    ni.textContent = `${nav.catchUp ? 'IDEA caught up' : 'shown in IDEA'} at line ${nav.line} (${(nav.ms / 1000).toFixed(1)} s)`;
+    ni.className = 'nav-ok';
+  } else if (nav.pending && nav.ideDown) {
+    ni.className = 'muted';
+    ni.append(nav.skipped + ' ');
+    if (state.ideStart !== 'never' && state.ideState !== 'starting') {
+      const b = document.createElement('button'); b.textContent = 'Start IDEA';
+      b.title = 'Open this project in IntelliJ IDEA (its window comes to the front)'; b.onclick = () => cmd('start-ide');
+      ni.append(b);
+    }
+  } else if (nav.pending) {
+    ni.className = 'muted';
+    ni.append(`IDEA follows when you switch to it${nav.foreground ? ` (now in front: ${nav.foreground})` : ''} `);
+    const b = document.createElement('button'); b.textContent = 'Show in IDEA now';
+    b.title = 'Jump now: IDEA comes to the front'; b.onclick = () => cmd('show-in-ide');
+    ni.append(b);
+  } else { ni.textContent = `IDEA navigation failed: ${nav.error || 'rc ' + nav.rc}`; ni.className = 'nav-bad'; }
+}
+
+// ---- diagrams ------------------------------------------------------------------------------------------
+const svgCache = new Map();
+let diag = {id: null, chapter: null};
+const MIN_SCALE = 0.55;   // below this PlantUML text becomes unreadable; wider diagrams scroll instead
+
+function sanitizeSvg(text) {
+  const doc = new DOMParser().parseFromString(text, 'image/svg+xml');
+  const svg = doc.documentElement;
+  if (!svg || svg.nodeName.toLowerCase() !== 'svg') throw new Error('not an SVG');
+  [svg, ...svg.querySelectorAll('*')].forEach(el => {
+    const name = el.localName.toLowerCase();
+    if (['script', 'foreignobject', 'set'].includes(name) || name.startsWith('animate')) { el.remove(); return; }
+    for (const a of [...el.attributes]) {
+      const name = a.localName.toLowerCase();
+      if (name.startsWith('on') || (/href$/i.test(a.name) && !a.value.startsWith('#'))) el.removeAttribute(a.name);
+    }
+  });
+  return svg;
+}
+async function loadSvg(d) {
+  if (!svgCache.has(d.id)) {
+    const r = await fetch(d.url);
+    if (!r.ok) throw new Error(`diagram ${d.id}: HTTP ${r.status}`);
+    svgCache.set(d.id, sanitizeSvg(await r.text()));
+  }
+  return svgCache.get(d.id).cloneNode(true);
+}
+function naturalSize(svg) {
+  // the viewBox keeps the drawing's own size; width/height change when the SVG is scaled for the card
+  const vb = (svg.getAttribute('viewBox') || '').split(/[\s,]+/).map(Number);
+  const w = vb[2] || parseFloat(svg.getAttribute('width')) || 800;
+  const h = vb[3] || parseFloat(svg.getAttribute('height')) || 600;
+  return {w, h};
+}
+function sizeSvg(svg, scale) {
+  const {w, h} = naturalSize(svg);
+  if (!svg.getAttribute('viewBox')) svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+  svg.removeAttribute('style');
+  svg.setAttribute('width', Math.round(w * scale));
+  svg.setAttribute('height', Math.round(h * scale));
+}
+function clearHighlights(root) {
+  root.querySelectorAll('.cw-hl').forEach(n => n.remove());
+  root.querySelectorAll('.cw-hl-text').forEach(n => n.classList.remove('cw-hl-text'));
+  root.querySelectorAll('rect.cw-comp').forEach(n => n.remove());
+  root.querySelectorAll('.cw-comp-line').forEach(n => n.classList.remove('cw-comp-line'));
+}
+function highlight(root, focus) {
+  clearHighlights(root);
+  const texts = [...root.querySelectorAll('text')];
+  let found = 0, first = null;
+  for (const f of focus || []) {
+    let hit = false;
+    for (const t of texts) {
+      if (!(t.textContent || '').includes(f)) continue;
+      const b = t.getBBox();
+      const r = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      r.setAttribute('class', 'cw-hl');
+      r.setAttribute('x', b.x - 4); r.setAttribute('y', b.y - 2);
+      r.setAttribute('width', b.width + 8); r.setAttribute('height', b.height + 4); r.setAttribute('rx', 3);
+      t.parentNode.insertBefore(r, t);
+      t.classList.add('cw-hl-text');
+      if (!first) first = r;
+      hit = true;
+    }
+    if (hit) found++;
+  }
+  return {found, first};
+}
+// Zoom to focus (checkbox, Z): scale the diagram so the phrase's marks fill the box at a readable size, never
+// below the fit-to-width scale and at most ZOOM_MAX; off = the fit-to-width scale. Returns the scale in use.
+const ZOOM_MAX = 1.5;
+let zoomOn = false;
+try { zoomOn = localStorage.getItem('codewalk.zoom') === '1'; } catch (e) { /* no storage */ }
+if (new URLSearchParams(location.search).get('zoom') === '1') zoomOn = true;
+function applyZoom() {
+  const box = $('diagbox'), svg = box.querySelector('svg');
+  if (!svg || !diag.id) return 0;
+  let scale = diag.scale;
+  if (zoomOn) {
+    const marks = [...svg.querySelectorAll('rect.cw-hl, rect.cw-comp')]
+      .filter(r => !r.parentNode.classList.contains('participant-tail'));   // a participant's tail sits at the bottom
+    if (marks.length) {
+      let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity;
+      for (const r of marks) {
+        const x = +r.getAttribute('x'), y = +r.getAttribute('y'), w = +r.getAttribute('width'), h = +r.getAttribute('height');
+        x1 = Math.min(x1, x); y1 = Math.min(y1, y); x2 = Math.max(x2, x + w); y2 = Math.max(y2, y + h);
+      }
+      const pad = 36, availH = parseFloat(getComputedStyle(box).maxHeight) || box.clientHeight;
+      const fit = Math.min((box.clientWidth - 4) / (x2 - x1 + 2 * pad), (availH - 4) / (y2 - y1 + 2 * pad));
+      scale = Math.max(diag.scale, Math.min(ZOOM_MAX, fit));
+    }
+  }
+  if (Math.abs(scale - (diag.cur || 0)) > 0.001) { sizeSvg(svg, scale); diag.cur = scale; }
+  return scale;
+}
+
+// Components named by the phrase: PlantUML puts the qualified name (.puml alias) on each element group.
+// A frame goes around the group's own shapes; a sequence participant also gets its head, tail and lifeline marked.
+const SHAPES = new Set(['rect', 'path', 'polygon', 'ellipse', 'circle']);
+function highlightComponents(root, names) {
+  const groups = [...root.querySelectorAll('g[data-qualified-name]')];
+  let found = 0, first = null;
+  for (const n of names || []) {
+    let hit = false;
+    for (const g of groups) {
+      if (g.getAttribute('data-qualified-name') !== n) continue;
+      if (g.classList.contains('participant-lifeline')) {
+        g.querySelectorAll('line').forEach(l => l.classList.add('cw-comp-line'));
+        continue;
+      }
+      const shapes = [...g.children].filter(e => SHAPES.has(e.localName) && !e.classList.contains('cw-comp'));
+      if (!shapes.length) continue;
+      let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity;
+      for (const sh of shapes) {
+        const b = sh.getBBox();
+        x1 = Math.min(x1, b.x); y1 = Math.min(y1, b.y); x2 = Math.max(x2, b.x + b.width); y2 = Math.max(y2, b.y + b.height);
+      }
+      const r = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      r.setAttribute('class', 'cw-comp');
+      r.setAttribute('x', x1 - 4); r.setAttribute('y', y1 - 4);
+      r.setAttribute('width', x2 - x1 + 8); r.setAttribute('height', y2 - y1 + 8); r.setAttribute('rx', 6);
+      g.appendChild(r);
+      if (!first) first = r;
+      hit = true;
+    }
+    if (hit) found++;
+  }
+  return {found, first};
+}
+// Scroll so the phrase's marks are in view: all of them across when they fit (else the first), and the text marks
+// (else the component frames) down. Returns how many named components ended up in view: a frame inside the
+// visible area, or for a sequence participant its column (the lifeline runs the full height).
+function placeMarks(box, instant) {
+  const br = box.getBoundingClientRect(), W = box.clientWidth, H = box.clientHeight;
+  const rel = el => { const r = el.getBoundingClientRect();
+    return {x1: r.left - br.left + box.scrollLeft, x2: r.right - br.left + box.scrollLeft,
+            y1: r.top - br.top + box.scrollTop, y2: r.bottom - br.top + box.scrollTop}; };
+  const T = [...box.querySelectorAll('rect.cw-hl')].map(rel);
+  const F = [...box.querySelectorAll('rect.cw-comp')].map(f => ({...rel(f),
+    name: f.parentNode.getAttribute('data-qualified-name'), column: f.parentNode.classList.contains('participant'),
+    tail: f.parentNode.classList.contains('participant-tail')}));
+  const all = T.concat(F);
+  if (!all.length) { box.scrollTo({left: 0, top: 0}); return {visible: 0}; }
+  const lo = (a, k) => Math.min(...a.map(m => m[k])), hi = (a, k) => Math.max(...a.map(m => m[k]));
+  const first = T[0] || F[0];
+  const cx = hi(all, 'x2') - lo(all, 'x1') <= W ? (lo(all, 'x1') + hi(all, 'x2')) / 2 : (first.x1 + first.x2) / 2;
+  // down: everything except participant tails (they repeat the heads at the bottom) when it fits, else the text marks
+  const U = all.filter(m => !m.tail), boxes = F.filter(f => !f.column), V = T.length ? T : boxes.length ? boxes : F;
+  const cy = U.length && hi(U, 'y2') - lo(U, 'y1') <= H ? (lo(U, 'y1') + hi(U, 'y2')) / 2
+    : hi(V, 'y2') - lo(V, 'y1') <= H ? (lo(V, 'y1') + hi(V, 'y2')) / 2 : (V[0].y1 + V[0].y2) / 2;
+  const left = Math.max(0, Math.min(cx - W / 2, box.scrollWidth - W));
+  const top = Math.max(0, Math.min(cy - H / 2, box.scrollHeight - H));
+  const smooth = !instant && !matchMedia('(prefers-reduced-motion: reduce)').matches;
+  box.scrollTo({left, top, behavior: smooth ? 'smooth' : 'auto'});
+  const seen = new Set(F.filter(f => f.x2 > left && f.x1 < left + W && (f.column || (f.y2 > top && f.y1 < top + H)))
+    .map(f => f.name));
+  return {visible: seen.size};
+}
+function scrollToMark(box, mark, instant) {
+  if (!mark) { box.scrollTo({left: 0, top: 0}); return; }
+  const br = box.getBoundingClientRect(), mr = mark.getBoundingClientRect();
+  const smooth = !instant && !matchMedia('(prefers-reduced-motion: reduce)').matches;
+  box.scrollTo({left: box.scrollLeft + mr.left - br.left - box.clientWidth / 2 + mr.width / 2,
+                top: box.scrollTop + mr.top - br.top - box.clientHeight / 2 + mr.height / 2,
+                behavior: smooth ? 'smooth' : 'auto'});
+}
+let renderSeq = 0;
+async function renderDiagram(phrase) {
+  const my = ++renderSeq;
+  const card = $('diagcard'), box = $('diagbox'), d = phrase && phrase.diagram;
+  if (!d) {
+    if (diag.id && phrase && diag.chapter === phrase.chapterId) {
+      clearHighlights(box); card.classList.add('dim');
+      diag.focus = []; diag.components = [];
+      $('diagnote').textContent = '· shown for an earlier phrase';
+      post('/api/page', {event: 'diagram-kept', diagram: diag.id, phraseId: phrase.id});
+    } else {
+      if (!card.hidden && phrase) post('/api/page', {event: 'diagram-hidden', diagram: diag.id, phraseId: phrase.id});
+      card.hidden = true; diag = {id: null, chapter: null};
+    }
+    syncOverlay();
+    return;
+  }
+  try {
+    card.hidden = false; card.classList.remove('dim');
+    $('diagtitle').textContent = d.title; $('diagnote').textContent = '· ' + d.id;
+    if (diag.id !== d.id) {
+      const svg = await loadSvg(d);
+      if (my !== renderSeq) return;   // a newer phrase arrived while this diagram was loading
+      const {w} = naturalSize(svg);
+      const scale = Math.min(1, Math.max((box.clientWidth - 2) / w, MIN_SCALE));
+      sizeSvg(svg, scale);
+      box.replaceChildren(svg);
+      diag.scale = diag.cur = scale;
+    }
+    diag.id = d.id; diag.chapter = phrase.chapterId; diag.focus = d.focus || [];
+    diag.components = d.components || [];
+    const {found, first} = highlight(box, diag.focus);
+    const comp = highlightComponents(box, diag.components);
+    const zoom = applyZoom();
+    const placed = placeMarks(box, SNAPSHOT);   // a snapshot scrolls at once, so a screenshot shows the final view
+    syncOverlay();
+    post('/api/page', {event: 'diagram-shown', diagram: d.id, phraseId: phrase.id, focusWanted: diag.focus.length,
+      focusFound: found, componentsWanted: diag.components.length, componentsFound: comp.found, componentsVisible: placed.visible, scale: Math.round(diag.scale * 100) / 100, boxWidth: box.clientWidth,
+      zoomOn, zoomScale: Math.round(zoom * 100) / 100});
+  } catch (e) {
+    $('msg').textContent = String(e);
+    $('overlay').hidden = true;
+    post('/api/page', {event: 'diagram-error', diagram: d.id, phraseId: phrase.id, error: String(e)});
+  }
+}
+function syncOverlay() {
+  if ($('overlay').hidden) return;
+  const svg = $('diagbox').querySelector('svg');
+  if (!svg || $('diagcard').hidden) { $('overlay').hidden = true; return; }
+  const big = svg.cloneNode(true);
+  sizeSvg(big, 1);
+  $('ovtitle').textContent = $('diagtitle').textContent + ($('diagcard').classList.contains('dim') ? ' · shown for an earlier phrase' : '');
+  $('ovbox').replaceChildren(big);
+  scrollToMark($('ovbox'), big.querySelector('.cw-hl') || big.querySelector('rect.cw-comp'), true);
+}
+function openOverlay() {
+  const svg = $('diagbox').querySelector('svg');
+  if (!svg || $('diagcard').hidden) return;
+  $('overlay').hidden = false;
+  syncOverlay();   // an open overlay keeps following the current diagram and its highlights
+  $('bClose').focus();
+  post('/api/page', {event: 'diagram-expanded', diagram: diag.id, width: naturalSize(svg).w});
+}
+function closeOverlay() { $('overlay').hidden = true; $('bExpand').focus(); }
+
+// who will answer: the answer helper (automatic), the session (a "ctl wait" / MCP listener), or nobody
+function renderListeners(s) {
+  const el = $('listeners'), helper = s.answerHelper && s.answerHelper !== 'off';
+  let t;
+  if (helper) t = `Questions are answered automatically by the answer helper (${s.answerHelper})` +
+                  (s.sessionListening ? '; the session is listening too.' : '. Stop & discuss notes wait for a session.');
+  else if (s.sessionListening) t = 'The session is listening for questions and Stop & discuss notes.';
+  else t = '⚠ Nobody is listening: questions and Stop & discuss notes wait until a session reads them.';
+  el.textContent = t; el.className = 'muted' + (!helper && !s.sessionListening ? ' none' : '');
+  const key = `${helper}|${s.sessionListening}`;
+  if (key !== renderListeners.last) {
+    renderListeners.last = key;
+    questions.forEach(q => { if (!q.answer) renderQuestion(q); });
+  }
+}
+function waitingText(q) {
+  const s = state || {}, h = q.helper;
+  if (h && h.state === 'working') return 'The answer helper is working on it…';
+  const after = s.sessionListening ? 'Waiting for the session…' : 'Nobody else is listening right now.';
+  if (h && h.state === 'failed') return `The answer helper could not answer (${h.error || 'no reply'}). ${after}`;
+  return s.sessionListening ? 'Waiting for the session’s answer…' : 'Waiting for an answer… nobody is listening right now.';
+}
+function renderQuestion(q) {
+  questions.set(q.id, q);
+  let el = document.getElementById('qa-' + q.id);
+  if (!el) { el = document.createElement('div'); el.id = 'qa-' + q.id; $('qa').prepend(el); }
+  const conf = q.stt && q.stt.confidence != null ? ` · heard with ${Math.round(q.stt.confidence * 100)}% confidence` : '';
+  el.innerHTML = '';
+  const qd = document.createElement('div'); qd.className = 'q'; qd.textContent = q.text;
+  const tag = document.createElement('span'); tag.className = 'tag'; tag.textContent = q.source + conf; qd.appendChild(tag);
+  el.appendChild(qd);
+  const ad = document.createElement('div'); ad.className = 'a';
+  if (q.answer) {
+    ad.textContent = q.answer.text;
+    const t = document.createElement('span'); t.className = 'tag'; t.textContent = 'answer by ' + q.answer.by; ad.appendChild(t);
+  } else { ad.className = 'a muted'; ad.textContent = waitingText(q); }
+  el.appendChild(ad);
+}
+
+function renderAction(action) {
+  $('actioncard').hidden = !action;
+  $('actionstatus').textContent = action ? action.status || 'unspecified' : '';
+  const labels = {kind: 'Type', where: 'Where', do: 'Instructions', why: 'Reason'};
+  $('actiondetails').textContent = action ? Object.entries(action).filter(([key]) => key !== 'status')
+    .map(([key, value]) => `${labels[key] || key}: ${typeof value === 'string' ? value : JSON.stringify(value, null, 2)}`).join('\n') : '';
+}
+
+function onEvent(ev) {
+  if (ev.type === 'hello') {
+    if (!SNAPSHOT && ev.pageVersion && PAGE_VERSION && ev.pageVersion !== PAGE_VERSION && reloadForNewPage(ev.pageVersion)) return;
+    renderOutline(ev.outline);
+    runTocClicks();
+    (ev.questions || []).forEach(renderQuestion);
+    if (!SNAPSHOT) {
+      let from = null;
+      try { from = sessionStorage.getItem('codewalk.reloadedFrom'); sessionStorage.removeItem('codewalk.reloadedFrom'); } catch (e) { /* */ }
+      post('/api/page', {event: 'page-ready', userAgent: navigator.userAgent, pageVersion: PAGE_VERSION, reloadedFor: from});
+    }
+    if (ev.current && ev.current.phrase) {   // keep the current phrase visible; a fresh page waits for Play
+      $('caption').textContent = ev.current.phrase.text;
+      markToc(ev.current.phrase.id);
+      renderAction(ev.current.phrase.action);
+      renderCode(ev.current.phrase.code, ev.current.nav);
+      renderDiagram(ev.current.phrase).then(() => {
+        if (new URLSearchParams(location.search).get('full') === '1') openOverlay();   // used for screenshots
+      });
+      const c = ev.current, s = ev.state;
+      if (!SNAPSHOT && c.audio && s && c.token === s.token && ['playing', 'paused'].includes(s.status) &&
+          !s.resumeAt && !s.audioDone && (cur.kind !== 'phrase' || cur.token !== c.token || !audio.src)) {
+        playClip('phrase', c.token, c.audio, c.phrase.id, false, 0);
+        audio.playbackRate = s.rate || 1;
+        reconnectClip = true;   // restart this phrase, never a stale phrase or a spoken answer
+        $('role').hidden = false; $('role').textContent = mine(s) ? 'you were here · press Play to restart this phrase' : ELSEWHERE;
+      }
+    }
+    const rs = ev.state && ev.state.restored, role = $('role');
+    if (rs && ev.state.status === 'idle') { role.hidden = false; role.textContent = 'you were here · press Play to continue'; }
+    runDiscussTest();
+  }
+  if (ev.type === 'reloaded') { lastMapping = ev.mapping; if (ev.outline) renderOutline(ev.outline); }
+  if (ev.state && ev.state.status === 'playing') lastMapping = null;
+  setState(ev.state);
+  switch (ev.type) {
+    case 'phrase': {
+      $('caption').textContent = ev.phrase.text; $('msg').textContent = '';
+      { const tm = markToc(ev.phrase.id);
+        if (!SNAPSHOT) post('/api/page', {event: 'toc-current', phraseId: ev.phrase.id, item: tocCur.item, inView: tm.inView, shown: tm.shown,
+                                          nextChapterDisabled: $('bNextCh').disabled, nextTopicDisabled: $('bNextIt').disabled}); }
+      renderAction(ev.phrase.action);
+      renderCode(ev.phrase.code, ev.nav);
+      renderDiagram(ev.phrase);
+      const role = $('role');
+      role.hidden = !(ev.role === 'correction' || ev.role === 'resume' || ev.role === 'return');
+      role.textContent = ev.role === 'correction' ? 'corrected phrase' : 'resumed';
+      playClip('phrase', ev.token, ev.audio, ev.phrase.id, ev.state.status === 'playing' && mine(ev.state), ev.startAt || 0);
+      if (ev.state.status === 'playing' && !mine(ev.state)) { reconnectClip = true; setState(state); role.hidden = false; role.textContent = ELSEWHERE; }
+      break;
+    }
+    case 'nav': renderNav(ev.nav); break;
+    case 'sound-page':   // the sound became free (its page closed): the current phrase goes on here, if the browser lets it
+      if (!ev.state.soundPage && reconnectClip && cur.kind === 'phrase' && cur.token === ev.state.token && ev.state.status === 'playing') {
+        const t = cur.token; reconnectClip = false; $('role').hidden = true;
+        audio.currentTime = 0; audio.play().catch(e => soundBlocked(t, e)); setState(state);
+      }
+      break;
+    case 'ide': {
+      const i = ev.ide, ni = $('navinfo');
+      ni.replaceChildren();
+      ni.className = i.state === 'running' ? 'nav-ok' : (i.state === 'refused' || i.state === 'failed') ? 'nav-bad' : 'muted';
+      ni.textContent = i.state === 'starting' ? `Starting IDEA… ${i.note || ''}`
+        : i.state === 'running' ? (i.note || (i.startSec ? `IDEA is ready (${i.startSec} s)` : 'IDEA is running'))
+        : i.note || i.state;
+      break;
+    }
+    case 'discussion': case 'reloaded':
+      if (!audio.paused) audio.pause();
+      break;
+    case 'pause': if (cur.kind === 'phrase') audio.pause(); break;
+    case 'resume': if (mine(ev.state) && cur.kind === 'phrase' && audio.src && !audio.ended) { const t = cur.token; audio.play().catch(e => soundBlocked(t, e)); } break;
+    case 'settings': audio.playbackRate = ev.state.rate; break;
+    case 'question-update': renderQuestion(ev.question); break;
+    case 'question':
+      renderQuestion(ev.question);
+      if (ev.state.status !== 'playing' && cur.kind === 'phrase' && !audio.paused) audio.pause();
+      break;
+    case 'answer':
+      renderQuestion(ev.question);
+      if (ev.question.answer && ev.question.answer.code) renderCode(ev.question.answer.code, ev.nav);
+      if (mine(ev.state)) playClip('answer', ev.token, ev.audio, null, true);
+      break;
+    case 'stop': audio.pause(); break;
+    case 'answer-done': if (ev.stopped && cur.kind === 'answer' && !audio.paused) audio.pause(); break;
+    case 'error': $('msg').textContent = ev.error; break;
+  }
+}
+
+// ?snapshot=1: render the current state once, no live connection (static previews and screenshots)
+const SNAPSHOT = new URLSearchParams(location.search).get('snapshot') === '1';
+// a newer control page on the server (after an update): reload once to get it; at most 3 reloads a minute
+const PAGE_VERSION = (document.querySelector('meta[name="codewalk-page"]') || {}).content;
+function reloadForNewPage(to) {
+  let log = [];
+  try { log = JSON.parse(sessionStorage.getItem('codewalk.reloads') || '[]').filter(t => Date.now() - t < 60000); } catch (e) { /* */ }
+  if (log.length >= 3) { $('msg').textContent = 'The control page changed several times in a minute; press Ctrl+F5 to load it.'; return false; }
+  log.push(Date.now());
+  try { sessionStorage.setItem('codewalk.reloads', JSON.stringify(log)); sessionStorage.setItem('codewalk.reloadedFrom', PAGE_VERSION + '>' + to); } catch (e) { /* */ }
+  location.reload();
+  return true;
+}
+if (new URLSearchParams(location.search).get('tocopen') === '1') document.body.classList.add('toc-open');   // screenshots of the drawer
+if (new URLSearchParams(location.search).get('discussopen') === '1') $('discussbox').hidden = false;          // screenshots of the note box
+if (SNAPSHOT) {
+  fetch('/api/state').then(r => r.json()).then(d => onEvent({type: 'hello', outline: d.outline, state: d.state,
+    questions: d.questions, current: d.current}));
+} else {
+  const es = new EventSource('/api/events?page=' + PAGE_ID);
+  es.onmessage = m => onEvent(JSON.parse(m.data));
+  es.onerror = () => { $('status').textContent = 'disconnected'; $('status').className = 'pill'; };
+}
+
+$('bPlay').onclick = () => {
+  if (reconnectClip && cur.kind === 'phrase' && cur.token === state.token && !state.resumeAt &&
+      ['playing', 'paused'].includes(state.status)) {
+    reconnectClip = false; $('role').hidden = true;
+    const token = cur.token;
+    audio.play().catch(e => {
+      if (cur.kind !== 'phrase' || cur.token !== token || state.token !== token) return;
+      reconnectClip = true; setState(state); report('audio-blocked', {error: String(e)});
+    });
+    soundClaim = Date.now();   // this click takes the sound (before setState, which would pause a page without it)
+    setState(state);   // audio.play runs inside this gesture, including when the server was already playing
+    return state.status === 'paused' ? cmd('play') : cmd('sound-here');
+  }
+  return cmd(state.status === 'playing' ? 'pause' : state.status === 'answering' ? 'stop-answer' : 'play');
+};
+$('bPrev').onclick = () => cmd('prev');
+$('bNext').onclick = () => cmd('next');
+$('bPrevCh').onclick = () => cmd('prev-chapter');
+$('bNextCh').onclick = () => cmd('next-chapter');
+$('bPrevIt').onclick = () => cmd('prev-item');
+$('bNextIt').onclick = () => cmd('next-item');
+$('bContinue').onclick = () => cmd('continue');
+$('bReplay').onclick = () => cmd('corrections', {accept: true}).then(() => cmd('continue'));
+$('bSkip').onclick = () => cmd('corrections', {accept: false}).then(() => cmd('continue'));
+$('bExpand').onclick = openOverlay;
+$('zoomFocus').checked = zoomOn;
+$('zoomFocus').onchange = e => {
+  zoomOn = e.target.checked;
+  try { localStorage.setItem('codewalk.zoom', zoomOn ? '1' : '0'); } catch (err) { /* no storage */ }
+  const z = applyZoom(); placeMarks($('diagbox'));
+  post('/api/page', {event: 'zoom-changed', on: zoomOn, zoomScale: Math.round(z * 100) / 100, diagram: diag.id});
+};
+$('bClose').onclick = closeOverlay;
+$('overlay').addEventListener('click', e => { if (e.target.id === 'overlay') closeOverlay(); });
+// Stop & discuss: open a note box first (pausing playback); the walk stops only on "Stop & send" / "Stop without a note"
+let discussWasPlaying = false;
+function updateDiscussSend() { $('dSend').disabled = !$('dnote').value.trim(); }
+function openDiscuss(via) {
+  if (!$('discussbox').hidden) { $('dnote').focus(); return; }
+  discussWasPlaying = state.status === 'playing';
+  if (discussWasPlaying) cmd('pause');
+  const typed = $('qtext').value.trim();   // text already typed in the question box becomes the note
+  if (typed) { $('dnote').value = typed; $('qtext').value = ''; }
+  $('discussbox').hidden = false; $('dmsg').textContent = ''; updateDiscussSend(); $('dnote').focus();
+  post('/api/page', {event: 'discuss-box-opened', via, wasPlaying: discussWasPlaying});
+}
+function closeDiscuss() {
+  $('discussbox').hidden = true; stopTalk();
+  post('/api/page', {event: 'discuss-box-closed', resumed: discussWasPlaying});
+  if (discussWasPlaying) cmd('play');
+  $('bDiscuss').focus();
+}
+function sendDiscuss(note) {
+  cmd('discuss', {note}).then(r => {
+    if (r && r.ok === false) return;
+    $('discussbox').hidden = true; $('dnote').value = ''; stopTalk();
+  });
+}
+$('bDiscuss').onclick = () => openDiscuss('button');
+$('dSend').onclick = () => { const n = $('dnote').value.trim(); if (n) sendDiscuss(n); };
+$('dNoNote').onclick = () => sendDiscuss('');
+$('dCancel').onclick = () => closeDiscuss();
+$('dnote').addEventListener('input', updateDiscussSend);
+$('dnote').addEventListener('keydown', e => {
+  e.stopPropagation();
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('dSend').click(); }
+  else if (e.key === 'Escape') { e.preventDefault(); closeDiscuss(); }
+});
+// test hook (?discusstest=1): D key opens the box (no stop yet), Cancel resumes, the button opens it again,
+// a typed note is sent - each step reported, so a runner can check the real handlers
+let discussTestDone = false;
+function runDiscussTest() {
+  if (discussTestDone || new URLSearchParams(location.search).get('discusstest') !== '1') return;
+  discussTestDone = true;
+  const rep = (step, extra = {}) => post('/api/page', {event: 'discuss-test', step, boxOpen: !$('discussbox').hidden, ...extra});
+  setTimeout(() => { document.body.dispatchEvent(new KeyboardEvent('keydown', {key: 'd', bubbles: true})); rep('d-key'); }, 2500);
+  setTimeout(() => { rep('before-cancel', {sendDisabled: $('dSend').disabled}); $('dCancel').click(); rep('cancelled'); }, 4500);
+  setTimeout(() => { $('bDiscuss').click(); rep('button'); }, 7500);
+  setTimeout(() => {
+    $('dnote').value = 'test note: why is the WAL fsynced before the year files?';
+    $('dnote').dispatchEvent(new Event('input', {bubbles: true}));
+    rep('typed', {sendDisabled: $('dSend').disabled}); $('dSend').click();
+  }, 9000);
+  setTimeout(() => rep('after-send'), 10500);
+}
+$('speed').onchange = e => cmd('speed', {value: e.target.value});
+$('voice').onchange = e => cmd('voice', {value: e.target.value});
+$('follow').onchange = e => cmd('ide-follow', {value: e.target.value});
+$('idestart').onchange = e => cmd('ide-start-mode', {value: e.target.value});
+$('bAsk').onclick = () => { const t = $('qtext').value.trim(); if (t) cmd('ask', {text: t}).then(() => { $('qtext').value = ''; }); };
+$('qtext').addEventListener('keydown', e => { if (e.key === 'Enter') $('bAsk').click(); e.stopPropagation(); });
+document.addEventListener('keydown', e => {
+  if (!$('overlay').hidden) { if (e.key === 'Escape' || e.key === 'x' || e.key === 'X') { e.preventDefault(); closeOverlay(); } return; }
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
+  if ((e.key === 'x' || e.key === 'X') && !$('diagcard').hidden) { e.preventDefault(); openOverlay(); return; }
+  if (e.key === ' ') { e.preventDefault(); $('bPlay').click(); }
+  else if (e.key === 'ArrowLeft') cmd(e.shiftKey ? 'prev-chapter' : 'prev');
+  else if (e.key === 'ArrowRight') cmd(e.shiftKey ? 'next-chapter' : 'next');
+  else if (e.key === 'q' || e.key === 'Q') { e.preventDefault(); $('qtext').focus(); }
+  else if (e.key === 'd' || e.key === 'D') { e.preventDefault(); openDiscuss('d-key'); }
+  else if (e.key === 'z' || e.key === 'Z') { e.preventDefault(); $('zoomFocus').click(); }
+  else if (e.key === 't' || e.key === 'T') { e.preventDefault(); toggleToc(); }
+  else if (e.key === ']') { e.preventDefault(); cmd('next-item'); }
+  else if (e.key === '[') { e.preventDefault(); cmd('prev-item'); }
+  else if (e.key === 'Escape' && state.status === 'answering') cmd('stop-answer');
+  else if (e.key === 'Escape' && document.body.classList.contains('toc-open')) toggleToc(false);
+});
+
+// push-to-talk: browser microphone -> server -> Azure speech-to-text; mode ask (a question) or note (discuss box)
+let rec = null, chunks = [];
+async function startTalk(mode = 'ask') {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({audio: true});
+    chunks = []; rec = new MediaRecorder(stream);
+    rec.ondataavailable = e => chunks.push(e.data);
+    rec.onstop = async () => {
+      stream.getTracks().forEach(t => t.stop());
+      const blob = new Blob(chunks, {type: rec.mimeType || 'audio/webm'});
+      const out = mode === 'note' ? $('dmsg') : $('msg');
+      out.textContent = 'Recognising…';
+      const r = await fetch(mode === 'note' ? '/api/stt' : '/api/ask-audio', {method: 'POST',
+        headers: {'X-Codewalk': '1', 'X-Source': 'voice', 'Content-Type': blob.type}, body: blob})
+        .then(r => r.json()).catch(e => ({ok: false, error: String(e)}));
+      out.textContent = r.ok ? '' : (r.error || 'not recognised');
+      if (mode === 'note' && r.ok) { $('dnote').value = ($('dnote').value.trim() + ' ' + r.text).trim(); updateDiscussSend(); }
+    };
+    rec.start(); (mode === 'note' ? $('dTalk') : $('talk')).classList.add('rec');
+    if (state.status === 'playing') cmd('pause');
+  } catch (e) { $('msg').textContent = 'Microphone not available: ' + e; }
+}
+function stopTalk() { if (rec && rec.state === 'recording') rec.stop(); $('talk').classList.remove('rec'); $('dTalk').classList.remove('rec'); }
+$('talk').addEventListener('pointerdown', () => startTalk('ask'));
+$('dTalk').addEventListener('pointerdown', () => startTalk('note'));
+$('dTalk').addEventListener('pointerup', stopTalk);
+$('dTalk').addEventListener('pointerleave', stopTalk);
+$('talk').addEventListener('pointerup', stopTalk);
+$('talk').addEventListener('pointerleave', stopTalk);
+</script>
+</body>
+</html>
