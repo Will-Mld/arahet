@@ -30,14 +30,23 @@ def test_port():
     requested = int(os.environ.get("CODEWALK_TEST_PORT", "0"))
     if 60777 <= requested <= 60781:
         raise ValueError("CODEWALK_TEST_PORT must not use ports 60777-60781")
-    while True:
+    # The preferred test port can belong to another worker, or remain in TIME_WAIT.
+    # Stay within the task's authorized test range; never stop an existing listener.
+    candidates = range(requested, 60921) if 60900 <= requested <= 60920 else [requested]
+    for candidate in candidates:
         with socket.socket() as s:
             if os.name != "nt":   # a fixed port in TIME_WAIT after the first player is still free for the next one
                 s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            s.bind(("127.0.0.1", requested))
+            try:
+                s.bind(("127.0.0.1", candidate))
+            except OSError:
+                if requested not in range(60900, 60921):
+                    raise
+                continue
             port = s.getsockname()[1]
         if not 60777 <= port <= 60781:
             return port
+    raise OSError("No free smoke-test port in the authorized 60900-60920 range")
 
 
 # the player's focus helper must ship with it: without it IDEA never follows the walk (found 2026-11-16)

@@ -88,7 +88,7 @@
       },
       {
        "id": "x.p4",
-       "text": "The voice comes from Azure Speech, with your own key. The code comes from your own copy of the walked project; a walk stores only file names, line numbers and a few words to find each place again.",
+       "text": "With Azure consent, the voice comes from Azure Speech, with your own key. The code comes from your own copy of the walked project; a walk stores only file names, line numbers and a few words to find each place again.",
        "diagram": "d1-context",
        "diagramComponents": [
         "azure",
@@ -118,8 +118,8 @@
        ],
        "code": {
         "file": "codewalk.py",
-        "start": 573,
-        "end": 584,
+        "start": 590,
+        "end": 601,
         "anchor": "class Player:"
        }
       },
@@ -133,8 +133,8 @@
        ],
        "code": {
         "file": "page.html",
-        "start": 812,
-        "end": 815,
+        "start": 839,
+        "end": 842,
         "anchor": "case 'pause': if (cur.kind"
        }
       },
@@ -147,8 +147,8 @@
        ],
        "code": {
         "file": "codewalk.py",
-        "start": 362,
-        "end": 373,
+        "start": 377,
+        "end": 389,
         "anchor": "def clip_paths("
        }
       },
@@ -161,22 +161,22 @@
        ],
        "code": {
         "file": "codewalk.py",
-        "start": 555,
-        "end": 571,
+        "start": 572,
+        "end": 588,
         "anchor": "def navigate_ide("
        }
       },
       {
        "id": "x.p9",
-       "text": "A question typed on the page can be answered at once by a short headless Claude call that sees the current phrase, its code and its schema.",
+       "text": "With your consent, a question typed on the page can be answered by a short headless Claude call that sees the current phrase, its code and its schema.",
        "diagram": "d2-architecture",
        "diagramComponents": [
         "helper"
        ],
        "code": {
         "file": "codewalk.py",
-        "start": 1325,
-        "end": 1340,
+        "start": 1404,
+        "end": 1419,
         "anchor": "def helper_context("
        }
       },
@@ -205,8 +205,8 @@
        ],
        "code": {
         "file": "bootstrap.py",
-        "start": 446,
-        "end": 496,
+        "start": 457,
+        "end": 507,
         "anchor": "def cmd_demo("
        }
       }
@@ -234,8 +234,8 @@
        ],
        "code": {
         "file": "codewalk.py",
-        "start": 122,
-        "end": 137,
+        "start": 133,
+        "end": 149,
         "anchor": "def load_script("
        }
       },
@@ -257,8 +257,8 @@
        ],
        "code": {
         "file": "codewalk.py",
-        "start": 232,
-        "end": 253,
+        "start": 247,
+        "end": 268,
         "anchor": "def diagram_components("
        }
       },
@@ -271,8 +271,8 @@
        ],
        "code": {
         "file": "codewalk.py",
-        "start": 146,
-        "end": 175,
+        "start": 158,
+        "end": 190,
         "anchor": "def validate("
        }
       },
@@ -299,7 +299,7 @@
      "phrases": [
       {
        "id": "x.p17",
-       "text": "Playing a phrase means one token, one clip and one event to the page. The token makes late events from an older phrase harmless.",
+       "text": "Playing a phrase means one token, an optional clip with Azure consent, and one event to the page. The server ignores page events with an older token.",
        "diagram": "d4-states",
        "diagramComponents": [
         "idle",
@@ -307,8 +307,8 @@
        ],
        "code": {
         "file": "codewalk.py",
-        "start": 940,
-        "end": 965,
+        "start": 978,
+        "end": 1005,
         "anchor": "def start_phrase("
        }
       },
@@ -322,22 +322,22 @@
        ],
        "code": {
         "file": "codewalk.py",
-        "start": 969,
-        "end": 1008,
+        "start": 1035,
+        "end": 1074,
         "anchor": "def advance("
        }
       },
       {
        "id": "x.p19",
-       "text": "A question pauses the walk, the answer is spoken, and the walk returns to where it was. Escape stops a long answer.",
+       "text": "A question pauses the walk. The answer is shown, and with Azure consent it is also spoken. Continue where you were; Escape stops a long spoken answer.",
        "diagram": "d4-states",
        "diagramComponents": [
         "answering"
        ],
        "code": {
         "file": "codewalk.py",
-        "start": 1127,
-        "end": 1134,
+        "start": 1206,
+        "end": 1213,
         "anchor": "if cmd == \"stop-answer\""
        }
       },
@@ -351,8 +351,8 @@
        ],
        "code": {
         "file": "codewalk.py",
-        "start": 896,
-        "end": 908,
+        "start": 934,
+        "end": 946,
         "anchor": "def save_position("
        }
       }
@@ -386,8 +386,8 @@
        ],
        "code": {
         "file": "codewalk.py",
-        "start": 1198,
-        "end": 1209,
+        "start": 1277,
+        "end": 1288,
         "anchor": "def discuss("
        }
       },
@@ -410,8 +410,8 @@
        ],
        "code": {
         "file": "codewalk.py",
-        "start": 1780,
-        "end": 1809,
+        "start": 1931,
+        "end": 1960,
         "anchor": "def apply_patch("
        }
       },
@@ -424,8 +424,8 @@
        ],
        "code": {
         "file": "codewalk.py",
-        "start": 1827,
-        "end": 1857,
+        "start": 1978,
+        "end": 2008,
         "anchor": "def amend("
        }
       },
@@ -438,8 +438,8 @@
        ],
        "code": {
         "file": "codewalk.py",
-        "start": 1210,
-        "end": 1239,
+        "start": 1289,
+        "end": 1318,
         "anchor": "def reload("
        }
       },
@@ -453,8 +453,8 @@
        ],
        "code": {
         "file": "codewalk.py",
-        "start": 1285,
-        "end": 1306,
+        "start": 1364,
+        "end": 1385,
         "anchor": "def continue_after_discussion("
        }
       }

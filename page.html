@@ -203,6 +203,11 @@ svg .cw-comp-line { stroke: #2563eb !important; stroke-width: 2.5 !important; } 
       <button id="bAsk">Ask</button>
       <button id="talk" title="Hold to ask by voice">🎙 Hold to ask</button>
     </div>
+    <div id="privacyNotice" class="muted"></div>
+    <div id="consentbox" hidden role="dialog" aria-labelledby="consentlabel">
+      <p id="consentlabel">Send your question, current phrase, nearby code, paths, diagram and earlier questions to Claude (Anthropic) for an answer?</p>
+      <button id="consentYes">Yes</button> <button id="consentNo">No</button>
+    </div>
     <div id="msg"></div>
     <div class="muted" id="listeners"></div>
     <div class="qa" id="qa"></div>
@@ -226,12 +231,29 @@ const post = (p, o) => fetch(p, {method: 'POST', headers: H, body: JSON.stringif
 const cmd = (c, args = {}) => (soundClaim = Date.now(), post('/api/cmd', {cmd: c, args, source: 'page'}).then(r => { if (r && r.ok === false) $('msg').textContent = r.error || 'failed'; return r; }));
 
 const audio = new Audio();
-addEventListener('pagehide', () => { if (!SNAPSHOT && state.soundPage === PAGE_ID)
+addEventListener('pagehide', () => { if (!SNAPSHOT)
   fetch('/api/page', {method: 'POST', headers: H, keepalive: true, body: JSON.stringify({event: 'page-closing', pageId: PAGE_ID})}); });
 audio.preservesPitch = true;
 let cur = {kind: null, token: null, phraseId: null, startedReported: false, startedAt: 0};
 let state = {}, outline = null, questions = new Map();
 let reconnectClip = false;   // a fresh page restores the phrase, then waits for an explicit Play gesture
+let consentPending = null;
+function askClaudeConsent() {
+  if (!state.claudeAvailable) return Promise.resolve();
+  if (state.consent && (typeof state.consent.claude === 'boolean' || state.consent.claudeRun)) return Promise.resolve();
+  if (consentPending) return consentPending;
+  $('consentbox').hidden = false;
+  consentPending = new Promise(resolve => {
+    const save = async value => {
+      const r = await post('/api/consent', {claude:value});
+      if (!r.ok) { $('msg').textContent = r.error || 'Consent could not be saved; the helper stays off.'; return; }
+      setState(r.state); $('consentbox').hidden = true; consentPending = null; resolve();
+    };
+    $('consentYes').onclick = () => save(true);
+    $('consentNo').onclick = () => save(false);
+  });
+  return consentPending;
+}
 
 function report(event, extra = {}) {
   post('/api/page', {event, kind: cur.kind, token: cur.token, phraseId: cur.phraseId, rate: audio.playbackRate,
@@ -268,6 +290,10 @@ let lastMapping = null;
 function setState(s) {
   if (!s) return;
   state = s;
+  const azureAllowed = s.consent && s.consent.azure === true;
+  const privacy = azureAllowed ? '' : 'Narration is off. Captions advance automatically. To turn narration on: bootstrap.py consent --azure yes.';
+  if ($('privacyNotice').textContent !== privacy) $('privacyNotice').textContent = privacy;
+  $('talk').disabled = $('dTalk').disabled = !azureAllowed;
   if (s.soundPage === PAGE_ID) soundClaim = 0;
   if (!mine(s) && cur.kind !== null && audio.src && !audio.paused) {   // the sound moved to another page
     audio.pause();
@@ -786,7 +812,8 @@ function onEvent(ev) {
       const role = $('role');
       role.hidden = !(ev.role === 'correction' || ev.role === 'resume' || ev.role === 'return');
       role.textContent = ev.role === 'correction' ? 'corrected phrase' : 'resumed';
-      playClip('phrase', ev.token, ev.audio, ev.phrase.id, ev.state.status === 'playing' && mine(ev.state), ev.startAt || 0);
+      if (ev.audio) playClip('phrase', ev.token, ev.audio, ev.phrase.id, ev.state.status === 'playing' && mine(ev.state), ev.startAt || 0);
+      else { audio.pause(); cur = {kind:null, token:ev.token, phraseId:ev.phrase.id}; }
       if (ev.state.status === 'playing' && !mine(ev.state)) { reconnectClip = true; setState(state); role.hidden = false; role.textContent = ELSEWHERE; }
       break;
     }
@@ -820,7 +847,7 @@ function onEvent(ev) {
     case 'answer':
       renderQuestion(ev.question);
       if (ev.question.answer && ev.question.answer.code) renderCode(ev.question.answer.code, ev.nav);
-      if (mine(ev.state)) playClip('answer', ev.token, ev.audio, null, true);
+      if (ev.audio && mine(ev.state)) playClip('answer', ev.token, ev.audio, null, true);
       break;
     case 'stop': audio.pause(); break;
     case 'answer-done': if (ev.stopped && cur.kind === 'answer' && !audio.paused) audio.pause(); break;
@@ -849,7 +876,14 @@ if (SNAPSHOT) {
 } else {
   const es = new EventSource('/api/events?page=' + PAGE_ID);
   es.onmessage = m => onEvent(JSON.parse(m.data));
-  es.onerror = () => { $('status').textContent = 'disconnected'; $('status').className = 'pill'; };
+  es.onerror = () => {
+    $('status').textContent = 'disconnected'; $('status').className = 'pill';
+    fetch('/api/stream-status').then(r => r.json()).then(s => {
+      $('msg').textContent = s.subscribers >= s.limit
+        ? `Too many live tabs/streams (limit ${s.limit}); close one and retry.`
+        : 'Live stream disconnected; a slow connection may have filled its queue. Reconnecting…';
+    }).catch(() => { $('msg').textContent = 'Live stream disconnected. Reconnecting…'; });
+  };
 }
 
 $('bPlay').onclick = () => {
@@ -941,7 +975,8 @@ $('speed').onchange = e => cmd('speed', {value: e.target.value});
 $('voice').onchange = e => cmd('voice', {value: e.target.value});
 $('follow').onchange = e => cmd('ide-follow', {value: e.target.value});
 $('idestart').onchange = e => cmd('ide-start-mode', {value: e.target.value});
-$('bAsk').onclick = () => { const t = $('qtext').value.trim(); if (t) cmd('ask', {text: t}).then(() => { $('qtext').value = ''; }); };
+$('bAsk').onclick = async () => { const t = $('qtext').value.trim(); if (t) { await askClaudeConsent(); const r = await cmd('ask', {text:t}); if (r.ok) $('qtext').value = ''; } };
+$('qtext').addEventListener('focus', () => askClaudeConsent());
 $('qtext').addEventListener('keydown', e => { if (e.key === 'Enter') $('bAsk').click(); e.stopPropagation(); });
 document.addEventListener('keydown', e => {
   if (!$('overlay').hidden) { if (e.key === 'Escape' || e.key === 'x' || e.key === 'X') { e.preventDefault(); closeOverlay(); } return; }
@@ -950,7 +985,7 @@ document.addEventListener('keydown', e => {
   if (e.key === ' ') { e.preventDefault(); $('bPlay').click(); }
   else if (e.key === 'ArrowLeft') cmd(e.shiftKey ? 'prev-chapter' : 'prev');
   else if (e.key === 'ArrowRight') cmd(e.shiftKey ? 'next-chapter' : 'next');
-  else if (e.key === 'q' || e.key === 'Q') { e.preventDefault(); $('qtext').focus(); }
+  else if (e.key === 'q' || e.key === 'Q') { e.preventDefault(); askClaudeConsent(); $('qtext').focus(); }
   else if (e.key === 'd' || e.key === 'D') { e.preventDefault(); openDiscuss('d-key'); }
   else if (e.key === 'z' || e.key === 'Z') { e.preventDefault(); $('zoomFocus').click(); }
   else if (e.key === 't' || e.key === 'T') { e.preventDefault(); toggleToc(); }
@@ -964,6 +999,8 @@ document.addEventListener('keydown', e => {
 let rec = null, chunks = [];
 async function startTalk(mode = 'ask') {
   try {
+    if (!state.consent || state.consent.azure !== true) { $('msg').textContent = 'Spoken questions are off until Azure consent is yes.'; return; }
+    if (mode === 'ask') await askClaudeConsent();
     const stream = await navigator.mediaDevices.getUserMedia({audio: true});
     chunks = []; rec = new MediaRecorder(stream);
     rec.ondataavailable = e => chunks.push(e.data);

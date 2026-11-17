@@ -205,7 +205,7 @@ class Exports(unittest.TestCase):
         (self.project / "LICENSE").write_text("All rights reserved.")
         result = self.export(with_code=True)
         self.assertFalse(result["codeIncluded"])
-        self.assertIn("not on the fixed allow-list", result["note"])
+        self.assertIn("not one canonical allowed licence", result["note"])
         output = self.directory / "not-created/strict.zip"
         with self.assertRaisesRegex(bundles.BundleError, "--strict"):
             bundles.export_bundle(self.script, output, with_code=True, strict=True)
@@ -349,13 +349,13 @@ class Exports(unittest.TestCase):
                 pass
 
         server = None
-        for port in range(60867, 60880):
+        for port in range(60902, 60920):
             try:
                 server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
                 break
             except OSError:
                 continue
-        self.assertIsNotNone(server, "no free local test port in 60867-60879")
+        self.assertIsNotNone(server, "no free local test port in 60902-60919")
         server.daemon_threads = True
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()

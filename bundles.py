@@ -86,15 +86,84 @@ def _normal(text):
     return " ".join(text.replace("\ufeff", "").replace("“", '"').replace("”", '"').lower().split())
 
 
-def _standard_body(text, body):
-    """Ignore a title/copyright header, never an extra term after a standard grant."""
-    normalized, target = _normal(text), _normal(body)
-    if not normalized.endswith(target):
+HOLDER_TERMS = re.compile(r"\b(?:only|must|may|not|shall|should|permission|permit|commercial|noncommercial|"
+                          r"prohibited|restrict\w*|require\w*|educational|licen[cs]\w*|except|without|terms|conditions?|"
+                          r"evaluation|personal|research|friends|discretion|resale|sale|sell|use|usage|purposes?|rights|"
+                          r"contact|allowed|granted|grant|free|trial|internal|academic|students|non)\b", re.I)
+# Copyright holders are names. Allow-list (review re-check F01): only these lower-case words may appear in a name;
+# every other word must start with a capital letter.
+HOLDER_LOWER_WORDS = frozenset("and the of its affiliates subsidiaries inc ltd llc gmbh co corp contributors authors "
+                               "others team project foundation company developers de van von der den la le da di del du "
+                               "et al".split())
+HOLDER_ABBREVIATIONS = frozenset("inc corp co ltd jr sr st bros llc".split())
+
+
+def _safe_holder(holder):
+    """A holder line carries names only: an allow-list of characters and words, with the deny-list as a second guard."""
+    holder = re.sub(r"\s*<[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}>$", "", holder.strip())  # a trailing <e-mail>
+    if not 0 < len(holder) <= 120 or HOLDER_TERMS.search(holder):
         return False
-    prefix = text[:text.lower().find(body.split()[0].lower())]
-    return all(not line.strip() or re.match(r"(?i)^(?:#+\s*)?(?:copyright\b|all rights reserved\.|"
-               r"(?:the )?mit licen[cs]e|isc licen[cs]e|bsd.*licen[cs]e|spdx-license-identifier:)", line.strip())
-               for line in prefix.splitlines())
+    if any(not (ch.isalnum() or ch == " " or ch in ".,&'-") for ch in holder):
+        return False  # no other punctuation: no ; : ( ) / @, no Unicode look-alikes of a full stop or semicolon
+    words = re.findall(r"[^\W\d_]+", holder)
+    if not words or any(not (word[0].isupper() or word in HOLDER_LOWER_WORDS) for word in words):
+        return False  # a lower-case word outside the list is a sentence, not a name
+    for stop in re.finditer(r"([^\W\d_]+)\.(?=\s*\S)", holder):
+        if len(stop[1]) > 1 and stop[1].lower() not in HOLDER_ABBREVIATIONS:
+            return False  # a full stop inside the holder only after an initial or an abbreviation, never a sentence end
+    return True
+
+
+def _copyright_lines(text, template=False):
+    if template and _normal(text)=="copyright [yyyy] [name of copyright owner]":
+        return True
+    count=0
+    for line in text.splitlines():
+        line=line.strip()
+        if not line or _normal(line)=="all rights reserved.":
+            continue
+        # The exact unfilled Apache template is trusted text, not a free-form holder.
+        if template and _normal(line)=="copyright [yyyy] [name of copyright owner]":
+            count+=1
+            continue
+        match=re.fullmatch(r"(?i)(?:copyright\s+(?:\(c\)|©)|©)\s+"
+                          r"(?:\d{4}(?:\s*[-–,]\s*\d{4})*|<year>|\[year\])\s+(.+)",line)
+        if not match:
+            return False
+        holder=re.sub(r"(?i)\s+all\s+rights\s+reserved\.$","",match[1]).strip()
+        if not _safe_holder(holder):
+            return False
+        count+=1
+    return count<=3
+
+
+def _standard_body(text, body):
+    """Only a template title and copyright variables may precede the exact grant."""
+    normalized = _normal(text)
+    heads = ("permission is hereby granted", "permission to use, copy", "redistribution and use in source")
+    if sum(normalized.count(head) for head in heads) != 1:
+        return False  # never hide a second licence inside a copyright variable
+    match = re.search(body + "$", normalized)
+    if not match:
+        return False
+    raw_body=body.replace(r"\ ",r"\s+").replace(" ",r"\s+")
+    raw_match=re.search(raw_body+r"\s*$",text,re.I|re.S)
+    if not raw_match:
+        return False
+    holder = raw_match.groupdict().get("holder")  # BSD clause 3, checked in its original letter case
+    if holder and _normal(holder) not in ("the copyright holder", "the copyright holders") \
+            and not _safe_holder(" ".join(holder.split())):
+        return False
+    titles = r"(?:the )?mit license|isc license|bsd(?:[- ][23]-clause)? license"
+    prefix=[line for line in text[:raw_match.start()].splitlines() if line.strip()]
+    if prefix and re.fullmatch(titles,_normal(prefix[0])):
+        prefix.pop(0)
+    return _copyright_lines("\n".join(prefix))
+
+
+def apache_parts():
+    full = _normal((HERE / "third_party/APACHE-2.0.txt").read_text(encoding="utf-8"))
+    return full, full.split(" appendix: how to apply", 1)[0]
 
 
 def license_id(text):
@@ -103,19 +172,28 @@ def license_id(text):
         return "PolyForm-Strict-1.0.0"
     if DENIED_LICENSE_TERMS.search(normalized):
         return "restricted"
-    apache = _normal((HERE / "third_party/APACHE-2.0.txt").read_text(encoding="utf-8"))
-    if normalized.startswith(apache):  # keep any component notices verbatim with the project licence
+    apache, core = apache_parts()
+    if normalized==core:
         return "Apache-2.0"
-    if _standard_body(text, MIT_BODY):
+    if normalized.startswith(core+" appendix: how to apply"):
+        canonical=(HERE/"third_party/APACHE-2.0.txt").read_text(encoding="utf-8")
+        before,after=canonical.split("Copyright [yyyy] [name of copyright owner]",1)
+        words=lambda value:r"\s+".join(re.escape(word) for word in value.split())
+        appendix=re.match(r"\s*"+words(before)+r"\s+(?P<credits>.*?)\s+"+words(after),text,re.I|re.S)
+        if not appendix or not appendix["credits"].strip() or not _copyright_lines(appendix["credits"],template=True):
+            return "unknown"
+        return "Apache-2.0" if not text[appendix.end():].strip() else "Apache-2.0-with-additional-text"
+    if normalized.startswith(core + " "):
+        return "Apache-2.0-with-additional-text"
+    if _standard_body(text, re.escape(_normal(MIT_BODY))):
         return "MIT"
-    if _standard_body(text, ISC_BODY):
+    if _standard_body(text, re.escape(_normal(ISC_BODY))):
         return "ISC"
     for clauses in (2, 3):
-        third = (r" 3\. neither the name of .+? nor the names of its contributors may be used to endorse or "
+        third = (r" 3\. neither the name of (?P<holder>.+?) nor the names of its contributors may be used to endorse or "
                  r"promote products derived from this software without specific prior written permission.") if clauses == 3 else ""
         pattern = re.escape(_normal(BSD_GRANT)) + third + " " + re.escape(_normal(BSD_DISCLAIMER))
-        match = re.search(pattern + "$", normalized)
-        if match and _standard_body(text, text[text.lower().find("redistribution and use"):]):
+        if _standard_body(text, pattern):
             return f"BSD-{clauses}-Clause"
     return "unknown"
 
@@ -129,11 +207,58 @@ def detect_license(root, texts=None):
             data = texts[name] if texts is not None else read_file(path)
             found.append((name, license_id(data.decode("utf-8-sig", errors="replace"))))
     if not found:
-        return {"id": "missing", "file": None, "allowed": False}
-    # Ambiguous/conflicting root licence files do not opt into code redistribution.
-    ids = {item[1] for item in found}
-    ident = found[0][1] if len(ids) == 1 else "unknown"
-    return {"id": ident, "file": found[0][0], "files": [x[0] for x in found], "allowed": ident in ALLOWED}
+        return {"id": "missing", "file": None, "allowed": False, "codeAllowed": False, "rule": None,
+                "reason": "No root licence file was found."}
+    ident = found[0][1] if len(found) == 1 else "unknown"
+    extra = ident == "Apache-2.0-with-additional-text"
+    return {"id": "Apache-2.0 with additional terms" if extra else ident, "file": found[0][0], "files": [x[0] for x in found],
+            "allowed": ident in ALLOWED, "codeAllowed": ident in ALLOWED, "rule": "root-text" if ident in ALLOWED else None,
+            "apacheAdditionalText": extra,
+            "reason": ("The licence file adds terms for subcomponents; per-file Apache headers are required." if extra else
+                       "Multiple root licence files are ambiguous." if len(found) > 1 else
+                       "The root licence text is not one canonical allowed licence." if ident not in ALLOWED else None)}
+
+
+def apache_header(data):
+    lines = data.decode("utf-8-sig", errors="replace").splitlines()[:40]
+    # Only a header sentence at the start of a (possibly wrapped) comment line;
+    # a negation, source string or bare SPDX identifier does not establish terms.
+    text = "\n".join(re.sub(r"^\s*(?:/\*+|\*|//|#|<!--|--)?\s?", "", line) for line in lines)
+    grant=r'under\s+the\s+Apache\s+License,\s+Version\s+2\.0\s+\(the\s+"License"\);'
+    asf=(r"to\s+the\s+Apache\s+Software\s+Foundation\s+\(ASF\)\s+under\s+one\s+or\s+more\s+"
+         r"contributor\s+license\s+agreements\.\s+See\s+the\s+NOTICE\s+file\s+distributed\s+with\s+"
+         r"this\s+work\s+for\s+additional\s+information\s+regarding\s+copyright\s+ownership\.\s+"
+         r"The\s+ASF\s+licenses\s+this\s+file\s+to\s+You\s+")
+    for match in re.finditer(r"(?im)^\s*Licensed\s+(?:"+asf+r")?"+grant,text):
+        tail=text[match.end():]
+        if not tail.strip() or tail.lstrip().startswith(("*/","-->")) or re.match(r"\s*/\s*(?:\n|$)",tail):
+            return True
+        canonical=r"\s*you\s+may\s+not\s+use\s+this\s+file\s+except\s+in\s+compliance\s+with\s+the\s+License\."
+        if re.match(canonical,tail,re.I):
+            return True
+        if re.match(r"\s*(?:except|but|provided|however|subject\s+to|only|unless|excluding|with\s+(?:the\s+)?exception|on\s+condition)\b",tail,re.I):
+            continue
+        # A fresh paragraph or code after a one-line comment is not a grant continuation.
+        if not tail.split("\n",1)[0].strip():
+            rest=tail.split("\n",1)[1] if "\n" in tail else ""
+            end_line=text[:match.end()].count("\n")
+            next_raw=lines[end_line+1] if end_line+1<len(lines) else ""
+            single=re.match(r"^\s*(?:#|//)",lines[end_line])
+            if not rest.split("\n",1)[0].strip() or (single and not re.match(r"^\s*(?:#|//)",next_raw)):
+                return True
+    return False
+
+
+def check_code_license(license, sources):
+    if not license.get("apacheAdditionalText"):
+        return license
+    missing = [path for path, data in sources.items() if not apache_header(data)]
+    allowed = not missing and bool(sources)
+    return {**license, "allowed": allowed, "codeAllowed": allowed, "rule": "per-file-headers" if allowed else None,
+            "missingHeaders": missing,
+            "reason": None if allowed else
+                "The licence file adds terms for subcomponents; this file does not carry the Apache header, "
+                "so codewalk cannot tell which terms cover it: " + (", ".join(missing) or "no referenced source files")}
 
 
 def safe_path(value):
@@ -305,12 +430,8 @@ def export_bundle(script_path, output, project_root=None, with_code=False, stric
     project = project_reference(raw["project"], root)
     notices = project_notices(root, project)
     license = detect_license(root, notices)
-    include = with_code and license["allowed"]
-    excluded = f"Code not included: licence {license['id']} is not on the fixed allow-list." if with_code and not include else None
-    if excluded and strict:
-        raise BundleError(excluded + " --strict: no bundle written.")
     paths = sorted({safe_path(ph["code"]["file"]) for ph in loaded["_flat"] if ph.get("code")})
-    files, members = [], {}
+    files, members, sources = [], {}, {}
     for relative in paths:
         data = read_file(source_file(root, relative))
         if project["kind"] == "git":
@@ -323,8 +444,14 @@ def export_bundle(script_path, output, project_root=None, with_code=False, stric
                 raise BundleError(mismatch_message(prefix, data, digest(committed)) if committed is not None else
                                   prefix + " Check line endings (CRLF vs LF); use a checkout with core.autocrlf=false or a fresh clone.")
         files.append({"path": relative, **_file_info(data)})
-        if include:
-            members["code/" + relative] = data
+        sources[relative] = data
+    license = check_code_license(license, sources)
+    include = with_code and license["allowed"]
+    excluded = (f"Code not included: licence {license['id']}. " + license.get("reason", "Not an allowed licence.")) if with_code and not include else None
+    if excluded and strict:
+        raise BundleError(excluded + " --strict: no bundle written.")
+    if include:
+        members.update({"code/" + relative: data for relative, data in sources.items()})
     bundled = copy.deepcopy(raw)
     bundled["project"]["root"] = "../code" if include else "../project"
     used = {ph["diagram"] for ph in loaded["_flat"] if ph.get("diagram")}
@@ -362,6 +489,7 @@ def export_bundle(script_path, output, project_root=None, with_code=False, stric
                 "walk": {"id": raw["id"], "version": raw.get("version", 1), "title": raw["title"],
                          "path": "walk/walk.walk.json", "sha256": digest(script_data)},
                 "project": project, "files": files, "license": license, "codeIncluded": bool(include),
+                "codeAllowed": license["allowed"], "codeReason": license.get("reason"),
                 "voice": voice or codewalk.VOICES[0],
                 "members": {name: {"sha256": digest(data), "bytes": len(data)} for name, data in sorted(members.items())}}
     validate_manifest(manifest)
@@ -428,6 +556,8 @@ def validate_manifest(manifest):
         _typed(license["file"], str, "license.file", nullable=True)
         if "allowed" in license:
             _typed(license["allowed"], bool, "license.allowed")
+        if "codeAllowed" in license:
+            _typed(license["codeAllowed"], bool, "license.codeAllowed")
         if "files" in license:
             _typed(license["files"], list, "license.files")
             for file in license["files"]:
@@ -469,12 +599,19 @@ def validate_manifest(manifest):
             if type(info["bytes"]) is not int or not 0 <= info["bytes"] <= MAX_FILE:
                 raise BundleError("Invalid source size")
         included = manifest["codeIncluded"]
+        if "codeAllowed" in manifest:
+            _typed(manifest["codeAllowed"], bool, "codeAllowed")
+            if manifest["codeAllowed"] != license.get("codeAllowed") or (included and not manifest["codeAllowed"]):
+                raise BundleError("Code permission flag disagrees with licence rule")
+        if "codeReason" in manifest:
+            _typed(manifest["codeReason"], str, "codeReason", nullable=True)
         if type(included) is not bool or not isinstance(manifest["project"], dict):
             raise BundleError("Invalid project or code flag")
         expected = {"code/" + info["path"] for info in files} if included else set()
         if {name for name in members if name.startswith("code/")} != expected:
             raise BundleError("Code inventory disagrees with manifest")
-        if included and (manifest["license"]["id"] not in ALLOWED or "LICENSES/ATTRIBUTION.txt" not in members
+        permitted_id=license["id"] in ALLOWED or (license["id"]=="Apache-2.0 with additional terms" and license.get("rule")=="per-file-headers")
+        if included and (not permitted_id or "LICENSES/ATTRIBUTION.txt" not in members
                          or "LICENSES/" + safe_path(manifest["license"]["file"]) not in members):
             raise BundleError("Code bundle lacks an allowed licence/attribution")
         if not included and any(name.startswith("LICENSES/") for name in members):
@@ -587,9 +724,14 @@ def unpack_bundle(bundle, cache_dir=None):
             if field == "svg" and field in diagram:
                 validate_svg(read_file(source_file(destination, "walk/" + diagram[field])))
     if manifest["codeIncluded"]:
-        text = read_file(destination / "LICENSES" / manifest["license"]["file"]).decode("utf-8-sig")
-        if license_id(text) != manifest["license"]["id"]:
+        texts = {name: read_file(destination / "LICENSES" / name) for name in LICENSE_NAMES
+                 if "LICENSES/" + name in manifest["members"]}
+        actual_license = check_code_license(detect_license(destination, texts),
+            {info["path"]: read_file(destination / "code" / info["path"]) for info in manifest["files"]})
+        if not actual_license["allowed"] or actual_license["id"] != manifest["license"]["id"]:
             raise BundleError("Bundled licence text does not match its allowed id")
+        if manifest["license"].get("rule", "root-text") != actual_license["rule"]:
+            raise BundleError("Bundled licence rule does not match its source headers")
     return destination, manifest
 
 

@@ -148,7 +148,7 @@
      "phrases": [
       {
        "id": "g.p11",
-       "text": "Press Q to type a question about what you just heard. The walk pauses, and the answer is spoken and shown.",
+       "text": "Press Q to type a question about what you just heard. The walk pauses, and the answer is shown; with Azure consent, it is also spoken.",
        "diagram": "g1-page",
        "diagramComponents": [
         "ask"
@@ -156,7 +156,7 @@
       },
       {
        "id": "g.p12",
-       "text": "The page shows who will answer: a short Claude call if the Claude command-line tool is installed, a coding session that is listening, or nobody.",
+       "text": "The page shows who will answer: a short Claude call if it is installed and you consent, a coding session that is listening, or nobody.",
        "diagram": "g1-page",
        "diagramComponents": [
         "who"
@@ -164,7 +164,7 @@
       },
       {
        "id": "g.p13",
-       "text": "To speak instead of typing, hold the microphone button. Ask something now, or press Space to go on.",
+       "text": "With Azure consent, hold the microphone button to speak instead of typing. Ask something now, or press Space to go on.",
        "diagram": "g1-page",
        "diagramComponents": [
         "ask"

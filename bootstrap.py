@@ -37,6 +37,9 @@ from pathlib import Path, PurePosixPath
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import codewalk  # noqa: E402
+import consent
+import process_identity
+import secrets
 
 DEMO = {
     "module": "github.com/alpacahq/marketstore/v4",
@@ -230,7 +233,7 @@ def background_player() -> dict | None:
         info = json.loads(f.read_text(encoding="utf-8"))
         with codewalk.player_urlopen(info["url"] + "api/state", timeout=2) as response:
             response.read()
-        return info
+        return {key: value for key, value in info.items() if key != "instanceToken"}
     except (OSError, ValueError, KeyError):
         return None
 
@@ -305,6 +308,14 @@ def cmd_check(a) -> int:
     def row(item, state, note=""):
         rows.append((item, state, note))
 
+    facts["consent"]={}
+    for provider,label in (("azure","Azure narration and spoken questions"),("claude","Claude answers")):
+        decision=consent.decision(provider)
+        status="not decided" if decision is None else "yes" if decision else "no"
+        command=f"python3 bootstrap.py consent --{provider} yes|no"
+        facts["consent"][provider]={"state":status,"command":command}
+        row(label,status,command)
+
     v = sys.version_info
     row("Python 3.10 or newer", "OK" if v >= (3, 10) else "MISSING", f"{v.major}.{v.minor}.{v.micro}")
     missing = [f for f in ("codewalk.py", "page.html", "mcp_server.py") if not (HERE / f).exists()]
@@ -319,7 +330,7 @@ def cmd_check(a) -> int:
     row("example project (Apache Ignite 2.17.0)", "OK" if demo_ready("ignite") else "MISSING",
         f"{demo_root('ignite')}  (python3 bootstrap.py demo ignite)")
     row("claude command-line tool", "OK" if which("claude") else "OPTIONAL",
-        "answers page questions; can drive the player over MCP")
+        ("answers page questions; " if consent.decision("claude") is True else "answers need your consent; ")+"can drive the player over MCP")
     row("codex command-line tool", "OK" if which("codex") else "OPTIONAL", "can drive the player over MCP")
     for tool in ("claude", "codex"):
         reg = mcp_registered(tool) if not a.quick else None
@@ -346,7 +357,7 @@ def cmd_check(a) -> int:
             (f", version {version}" if version > 1 else "") + (f", {len(r['findings'])} findings" if r["findings"] else ""))
     must = [r for r in rows if r[1] in ("MISSING", "FAIL") and r[0] in ("Python 3.10 or newer", "player files")]
     if getattr(a, "json", False):
-        facts["ready"] = {"toListen": facts["key"]["state"] == "ready" and facts["demo"]["ready"],
+        facts["ready"] = {"toListen": facts["key"]["state"] == "ready" and facts["demo"]["ready"] and consent.decision("azure") is True,
                           "problems": [f"{r[0]}: {r[1]}" for r in rows if r[1] in ("MISSING", "FAIL", "TO FILL")]}
         print(json.dumps(facts, indent=1))
         return 1 if must else 0
@@ -611,6 +622,19 @@ def demo_mirror(tmp: Path, dest: Path, a) -> int:
 # ----------------------------------------------------------------------------- azure
 
 def cmd_azure(a) -> int:
+    if consent.decision("azure") is None:
+        try:
+            answer = input(consent.AZURE_MESSAGE + " [yes/no] ").strip().lower()
+        except (EOFError, OSError):
+            say("Azure consent is undecided; no speech will be sent. Use bootstrap.py consent --azure yes|no.")
+            return 1
+        if answer not in ("yes", "no", "y", "n"):
+            say("Please answer yes or no; Azure consent remains undecided.")
+            return 1
+        consent.record(azure=answer in ("yes", "y"))
+    if consent.decision("azure") is not True:
+        say("Azure consent is no: narration and spoken questions are off; captions still work.")
+        return 0 if not a.test else 1
     kf = codewalk.KEY_FILE
     st = key_state()
     if st == "missing":
@@ -662,8 +686,8 @@ def cmd_hook(a) -> int:
             continue
         r = subprocess.run(plans[tool], capture_output=True, text=True, timeout=120)
         say(f"  {'done' if r.returncode == 0 else 'failed'}: {(r.stdout or r.stderr).strip()[:300]}")
-    say("Page questions are answered by a short headless Claude call when the claude tool is installed")
-    say("(codewalk.py serve --answerer claude, the default then). The MCP server reaches the player at")
+    say("The Claude answer helper needs explicit consent (bootstrap.py consent --claude yes|no).")
+    say("--answerer claude opts in for that run only. The MCP server reaches the player at")
     say(f"CODEWALK_URL (default http://127.0.0.1:{codewalk.DEFAULT_PORT}/).")
     return 0
 
@@ -720,6 +744,10 @@ def cmd_run(a) -> int:
             return 1
     if key_state() != "ready":
         say("Note: no Azure key yet, so the walk can be read but not heard (python3 bootstrap.py azure).")
+    if consent.decision("azure") is None:
+        say("Narration is off until you decide: bootstrap.py consent --azure yes|no")
+    if consent.decision("claude") is None and which("claude"):
+        say("Claude answers are off until you decide: bootstrap.py consent --claude yes|no")
     running = background_player()
     if a.background and running:
         say(f"A player is already running in the background ({running['walk']}): {running['url']}")
@@ -751,18 +779,20 @@ def cmd_run(a) -> int:
     log_path = STATE_DIR / "player.log" if a.background else None
     log = None
     diagnostic = f"See the log: {log_path}" if log_path else "See the terminal output above."
+    instance_token = secrets.token_urlsafe(32)
+    child_env = {**os.environ, "CODEWALK_INSTANCE_TOKEN": instance_token}
     try:
         if a.background:
             STATE_DIR.mkdir(parents=True, exist_ok=True)
             log = open(log_path, "a", encoding="utf-8")
-            kw = {"cwd": HERE, "stdin": subprocess.DEVNULL, "stdout": log, "stderr": subprocess.STDOUT}
+            kw = {"cwd": HERE, "stdin": subprocess.DEVNULL, "stdout": log, "stderr": subprocess.STDOUT, "env": child_env}
             if os.name == "nt":
                 kw["creationflags"] = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
             else:
                 kw["start_new_session"] = True
             proc = subprocess.Popen(cmd, **kw)
         else:
-            proc = subprocess.Popen(cmd, cwd=HERE)
+            proc = subprocess.Popen(cmd, cwd=HERE, env=child_env)
     except OSError as e:
         say(f"The player could not start: {e}. {diagnostic}")
         return 1
@@ -794,9 +824,12 @@ def cmd_run(a) -> int:
         return 1
     say(f"Open {url} and press Play." + ("" if a.no_open or not open_browser(url) else " (opened in your browser)"))
     if a.background:
+        identity = process_identity.identity(proc.pid)
         info = {"pid": proc.pid, "url": url, "walk": a.walk or f"bundle:{prepared['manifest']['walk']['id']}", "port": port, "log": str(STATE_DIR / "player.log"),
-                "startedAt": time.strftime("%Y-%m-%dT%H:%M:%S")}
+                "startedAt": time.strftime("%Y-%m-%dT%H:%M:%S"), "instanceToken": instance_token,
+                "processStart": identity["start"] if identity else None}
         (STATE_DIR / "player.json").write_text(json.dumps(info, indent=1) + "\n", encoding="utf-8")
+        (STATE_DIR / "player.json").chmod(0o600)
         say(f"PLAYER RUNNING: {url} (in the background, pid {proc.pid}). Stop it with: bootstrap.py stop")
         return 0
     say("Stop the player with Ctrl+C.")
@@ -811,20 +844,74 @@ def cmd_stop(a) -> int:
     f = STATE_DIR / "player.json"
     try:
         info = json.loads(f.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+    except ValueError:
+        f.unlink(missing_ok=True)
+        say("Removed malformed player.json; process identity could not be verified. Killed nothing.")
+        return 0
+    except OSError:
         say("No background player was started from this folder.")
         return 0
-    pid = int(info["pid"])
-    if os.name == "nt":
-        subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"], capture_output=True)
-    else:
-        import signal  # noqa: PLC0415
+    info = info if isinstance(info, dict) else {}
+    pid, token, port = info.get("pid"), info.get("instanceToken"), info.get("port")
+    acknowledged = answered = False
+    if type(pid) is int and pid > 0 and isinstance(token, str) and len(token) >= 32 and type(port) is int and 1 <= port <= 65535:
+        # Construct loopback ourselves: never forward the secret to a URL in a stale state file.
+        request = urllib.request.Request(f"http://127.0.0.1:{port}/api/shutdown", data=b"{}", method="POST",
+                                         headers={"X-Codewalk-Instance": token, codewalk.CTRL_HEADER: "1"})
         try:
-            os.kill(pid, signal.SIGTERM)
-        except ProcessLookupError:
+            with codewalk.player_urlopen(request, timeout=2) as response:
+                answered = True
+                payload = json.loads(response.read())
+                acknowledged = isinstance(payload, dict) and payload.get("ok") is True
+        except urllib.error.HTTPError:
+            answered = True
+        except (OSError, ValueError):
             pass
+    if answered and not acknowledged:
+        f.unlink(missing_ok=True)
+        say("Removed stale player.json; shutdown was refused or unrecognized. Killed nothing.")
+        return 0
+    if not acknowledged:
+        identity = process_identity.identity(pid)
+        verified = (identity and isinstance(info.get("processStart"), str) and identity["start"] == info["processStart"]
+                    and process_identity.is_player(identity, HERE / "codewalk.py"))
+        if not verified:
+            f.unlink(missing_ok=True)
+            say("Removed stale player.json; process identity could not be verified. Killed nothing.")
+            return 0
+        if process_identity.identity(pid) != identity:
+            f.unlink(missing_ok=True)
+            say("Removed stale player.json; process identity changed. Killed nothing.")
+            return 0
+        if os.name == "nt":
+            subprocess.run(["taskkill", "/PID", str(pid), "/F"], capture_output=True)
+        else:
+            import signal
+            try:
+                os.kill(pid, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+    if acknowledged:
+        for _ in range(30):
+            with socket.socket() as probe:
+                probe.settimeout(.2)
+                if probe.connect_ex(("127.0.0.1", port)) != 0:
+                    break
+            time.sleep(.1)
+        else:
+            say("Shutdown requested; the player is still closing. Kept player.json for a later retry.")
+            return 1
     f.unlink(missing_ok=True)
     say(f"Stopped the background player (pid {pid}, {info.get('url')}).")
+    return 0
+
+
+def cmd_consent(a):
+    decisions = {key: getattr(a, key) == "yes" for key in ("azure", "claude") if getattr(a, key) is not None}
+    if not decisions:
+        print(json.dumps({"consent": consent.read(), "file": str(consent.path())}))
+        return 0
+    print(json.dumps({"consent": consent.record(**decisions), "file": str(consent.path())}))
     return 0
 
 
@@ -886,6 +973,10 @@ def main(argv=None) -> int:
                         "git forces git, mirror is MarketStore-only, archive is Ignite-only")
     d.set_defaults(fn=cmd_demo)
     z = sub.add_parser("azure"); z.add_argument("--test", action="store_true"); z.set_defaults(fn=cmd_azure)
+    co = sub.add_parser("consent", help="record explicit external-service decisions")
+    co.add_argument("--azure", choices=["yes", "no"])
+    co.add_argument("--claude", choices=["yes", "no"])
+    co.set_defaults(fn=cmd_consent)
     h = sub.add_parser("hook"); h.add_argument("--claude", action="store_true"); h.add_argument("--codex", action="store_true")
     h.add_argument("--dry-run", action="store_true"); h.add_argument("--yes", action="store_true")
     h.set_defaults(fn=cmd_hook)

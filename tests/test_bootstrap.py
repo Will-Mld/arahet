@@ -144,6 +144,8 @@ class PlayerStart(unittest.TestCase):
         self.proc = Mock(pid=12345)
         self.proc.poll.return_value = None
         self.proc.wait.return_value = 0
+        identity = patch.object(bootstrap.process_identity, "identity", return_value={"start": "fixture-start", "args": []})
+        identity.start(); self.addCleanup(identity.stop)
         for target, value in (("STATE_DIR", self.directory), ("key_state", Mock(return_value="missing")),
                               ("background_player", Mock(return_value=None))):
             mock = patch.object(bootstrap, target, value)
@@ -157,14 +159,14 @@ class PlayerStart(unittest.TestCase):
 
     def run_guide(self):
         with contextlib.redirect_stdout(io.StringIO()) as output:
-            result = bootstrap.main(["run", "guide", "--background", "--no-open", "--port", "60858"])
+            result = bootstrap.main(["run", "guide", "--background", "--no-open", "--port", "60902"])
         return result, output.getvalue()
 
     def test_existing_player_is_refused_with_address_and_stop_command(self):
-        bootstrap.background_player.return_value = {"walk": "guide", "url": "http://127.0.0.1:60858/"}
+        bootstrap.background_player.return_value = {"walk": "guide", "url": "http://127.0.0.1:60902/"}
         result, output = self.run_guide()
         self.assertEqual(result, 1)
-        self.assertIn("http://127.0.0.1:60858/", output)
+        self.assertIn("http://127.0.0.1:60902/", output)
         self.assertIn("bootstrap.py stop", output)
         self.spawn.assert_not_called()
 
@@ -201,13 +203,13 @@ class PlayerStart(unittest.TestCase):
         self.sockets.return_value.__enter__.return_value.bind.side_effect = OSError("occupied")
         result, output = self.run_guide()
         self.assertEqual(result, 1)
-        self.assertIn("port 60858 is already in use", output)
+        self.assertIn("port 60902 is already in use", output)
         self.spawn.assert_not_called()
 
     def test_demo_ide_option_is_explicitly_ignored_in_view_mode(self):
         with patch.object(bootstrap, "demo_ready", return_value=True), \
              contextlib.redirect_stdout(io.StringIO()) as output:
-            result = bootstrap.main(["run", "demo", "--background", "--no-open", "--ide", "--port", "60858"])
+            result = bootstrap.main(["run", "demo", "--background", "--no-open", "--ide", "--port", "60902"])
         self.assertEqual(result, 0)
         self.assertIn("--ide is ignored", output.getvalue())
         self.assertIn("--view", self.spawn.call_args.args[0])
@@ -215,7 +217,7 @@ class PlayerStart(unittest.TestCase):
     def test_success_requires_response_and_leaves_state(self):
         result, output = self.run_guide()
         self.assertEqual(result, 0)
-        self.assertIn("PLAYER RUNNING: http://127.0.0.1:60858/", output)
+        self.assertIn("PLAYER RUNNING: http://127.0.0.1:60902/", output)
         self.endpoint.assert_called_once()
         self.assertEqual(json.loads((self.directory / "player.json").read_text())["pid"], 12345)
         self.assertTrue(self.spawn.call_args.kwargs["stdout"].closed)

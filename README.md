@@ -86,6 +86,12 @@ GitHub commit; an existing pinned example download is a fallback. A checksum mis
 Hashes are byte-exact: for a CRLF/LF mismatch, use a checkout with `core.autocrlf=false` or a fresh clone configured that way.
 `python3 codewalk.py serve --bundle ignite.codewalk.zip --no-ide` also works; IDEA follow needs `--project-root`.
 
+## What leaves your machine
+
+With your explicit Azure consent, narration text goes to Azure Speech and spoken-question audio goes to Azure speech-to-text. With your explicit Claude consent, the answer helper sends your question, current phrase, nearby code, paths, diagram and earlier questions to Claude (Anthropic). The helper is off without yes; `--answerer claude` opts in for that run only. Decisions are kept in `~/.config/codewalk/consent.json`; change them with `python3 bootstrap.py consent --azure yes|no --claude yes|no`.
+
+Without Azure consent, narration and spoken questions are off; captions and text questions still work. Questions, answers and notes are kept locally under `runs/`; delete that folder to remove the transcripts. Cached audio and its text metadata live separately in `cache/tts/` (or `CODEWALK_CACHE_DIR`); remove that cache too to erase cached spoken answers.
+
 ## Your narration
 
 The voice is made with your own Azure Speech key, once per phrase, and kept in `cache/tts/` (one mp3 per phrase,

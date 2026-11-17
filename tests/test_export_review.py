@@ -202,7 +202,7 @@ class ReviewFixes(unittest.TestCase):
                 nodelay.append(self.connection.getsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY))
 
         server = None
-        for port in range(60867, 60880):
+        for port in range(60902, 60920):
             try:
                 server = ThreadingHTTPServer(("127.0.0.1", port), Observed)
                 break

@@ -36,6 +36,10 @@ from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from xml.sax.saxutils import escape
+import walk_schema
+import consent
+import secrets
+import ipaddress
 
 VERSION = "1.1.0"   # 1.1.0: public layout - key file and project root not tied to one machine, --view mode, pauseAfter
 HERE = Path(__file__).resolve().parent
@@ -80,6 +84,13 @@ VOICES = ["en-US-AndrewNeural", "en-US-AvaNeural", "en-GB-RyanNeural"]
 WINDOWS_CWD = None if os.name == "nt" else "/mnt/c"
 DEFAULT_PORT = 60777
 CTRL_HEADER = "X-Codewalk"
+# 2026-11-17 runs/p1/measurements.json: largest demo-shaped JSON request 386 B;
+# one-minute 48 kHz stereo 16-bit WAV 11,520,044 B; full-walk queue 487 events.
+# Browser workload: two tabs + one agent SSE stream = 3. Each cap is >= 2x.
+MAX_JSON_BODY = 64 * 1024
+MAX_AUDIO_BODY = 32 * 1024 * 1024
+MAX_SUBSCRIBERS = 8
+MAX_EVENT_QUEUE = 1024
 
 
 def now_iso() -> str:
@@ -121,6 +132,7 @@ IDEA_LAUNCHER = to_windows_path(IDEA_LAUNCHER) if os.name == "nt" else str(win_t
 
 def load_script(path: str | Path, project_root: str | None = None) -> dict:
     s = json.loads(Path(path).read_text(encoding="utf-8"))
+    walk_schema.require(s)
     # the project root may be relative to the walk file (repository walks) or given at run time
     root = project_root or s["project"]["root"]
     if not re.match(r"^[A-Za-z]:[\\/]", root) and not root.startswith("/"):
@@ -144,6 +156,9 @@ def read_lines(root: Path, rel: str) -> list[str]:
 
 
 def validate(script: dict, script_dir: Path | None = None) -> dict:
+    errors = walk_schema.findings(script)
+    if errors:
+        return {"status": "FAIL", "findings": errors}
     root = win_to_wsl(script["project"]["root"])
     findings, ids, pointers = [], set(), 0
     if script.get("schema") != "codewalk-script-v1":
@@ -367,6 +382,7 @@ def clip_paths(text: str, voice: str) -> tuple[Path, Path]:
 
 def tts(text: str, voice: str) -> tuple[Path, dict]:
     """Return (mp3 path, meta). Cached by voice+text."""
+    consent.require_azure()
     mp3, meta_p = clip_paths(text, voice)
     with TTS_LOCK:
         if mp3.exists() and meta_p.exists():
@@ -412,6 +428,7 @@ def tts(text: str, voice: str) -> tuple[Path, dict]:
 
 def stt(audio: bytes) -> dict:
     """Azure fast transcription of any ffmpeg-readable audio; returns text, locale, confidence."""
+    consent.require_azure()
     conv = subprocess.run(["ffmpeg", "-v", "error", "-i", "pipe:0", "-ac", "1", "-ar", "16000", "-f", "wav", "pipe:1"],
                           input=audio, capture_output=True, timeout=60)
     if conv.returncode != 0 or len(conv.stdout) < 1000:
@@ -612,10 +629,18 @@ class Player:
         self.restored: dict | None = None      # position restored at start-up (from runs/positions), until Play
         self.positions_dir = POSITIONS         # tests use their own folder, so they never move the user's position
         self.answerer, self.answer_model = "off", "sonnet"   # answer helper for page questions: claude | off
+        self.claude_run_consent = False
+        self.answerer_disabled = False
+        self.instance_token = os.environ.get("CODEWALK_INSTANCE_TOKEN") or secrets.token_urlsafe(32)
+        self.caption_token = None
+        self.caption_remaining = 0.0
+        self.caption_updated = time.monotonic()
+        self.caption_clock_started = False
         self.waiters, self.last_wait_end = 0, 0.0             # session long-polls (/api/wait) in progress
         self.listening_reported: bool | None = None
 
     def set_script(self, script: dict, script_path: Path | None):
+        walk_schema.require(script)
         self.script, self.flat = script, script["_flat"]
         self.script_path = script_path
         self.version = int(script.get("version", 1))
@@ -750,6 +775,8 @@ class Player:
     def trace(self, kind: str, **kw):
         rec = {"ts": now_iso(), "kind": kind, **kw}
         with self.lock:
+            if self.trace_f.closed:
+                return
             self.trace_f.write(json.dumps(rec, ensure_ascii=False) + "\n")
             self.trace_f.flush()
 
@@ -770,6 +797,8 @@ class Player:
                 "queued": [self.flat[i]["id"] for i in self.queue],
                 "discussNote": self.discuss_note, "inboxSeq": len(self.inbox),
                 "answerHelper": self.answerer if self.answerer == "off" else f"{self.answerer} ({self.answer_model})",
+                "consent": {**consent.read(), "claudeRun": self.claude_run_consent},
+                "claudeAvailable": bool(shutil.which("claude")) and not self.answerer_disabled,
                 "sessionListening": self.waiters > 0 or time.time() - self.last_wait_end < 5.0,
                 "restored": self.restored,
                 "ideFollow": self.ide_follow if self.ide else "off",
@@ -781,7 +810,16 @@ class Player:
         with self.lock:
             ev = {**ev, "ts": now_iso(), "state": self.snapshot()}
             for q in list(self.subs):
-                q.put(ev)
+                try:
+                    q.put_nowait(ev)
+                except queue.Full:
+                    self.subs.remove(q)
+                    gone = self.sub_pages.pop(id(q), None)
+                    if gone == self.sound_page and gone not in self.sub_pages.values():
+                        self.sound_page = None
+                    q.closed.set()
+                    q.close_reason = "slow subscriber"
+                    self.trace("stream-disconnected", reason="slow subscriber queue limit", limit=MAX_EVENT_QUEUE)
             self.trace("event", type=ev["type"], status=self.status, phraseId=ev["state"]["phraseId"],
                        token=self.token, version=self.version,
                        **{k: v for k, v in ev.items()
@@ -942,13 +980,14 @@ class Player:
         with self.lock:
             self.idx = max(0, min(idx, len(self.flat) - 1))
             self.token += 1
+            self.caption_token = None
             tok, self.status, self.audio_done = self.token, "playing", False
             self.cur_role = role
             ph = self.flat[self.idx]
         if nav is None and ph.get("code") and self.ide:
             nav = self.nav_to(ph["code"])
         try:
-            mp3, meta = tts(ph["text"], self.voice)
+            mp3, meta = tts(ph["text"], self.voice) if consent.decision("azure") is True else (None, {})
         except Exception as e:  # noqa: BLE001 - reported to the page and the trace
             with self.lock:
                 self.status = "paused"
@@ -958,13 +997,40 @@ class Player:
             if tok != self.token:
                 return
             pub, did, dg = self.phrase_pub(ph)
-            ev = {"type": "phrase", "token": tok, "phrase": pub, "audio": f"/audio/{mp3.stem}.mp3",
-                  "audioDurationSec": meta.get("durationSec"), "nav": nav, "source": source,
+            ev = {"type": "phrase", "token": tok, "phrase": pub, "audio": f"/audio/{mp3.stem}.mp3" if mp3 else None,
+                  "audioDurationSec": meta.get("durationSec"), "captionDurationSec": max(3.0,len(ph["text"].split())/2.5) if not mp3 else None,
+                  "nav": nav, "source": source,
                   "startAt": round(start_at, 3), "role": role, "diagram": did if dg else None}
             self.last_phrase = ev
             self.restored = None
             self.emit(ev)
+            if not mp3:
+                self.caption_token = tok
+                self.caption_remaining = ev["captionDurationSec"]
+                self.caption_updated = time.monotonic()
+                if not self.caption_clock_started:
+                    self.caption_clock_started = True
+                    threading.Thread(target=self.caption_clock, daemon=True).start()
         self.save_position(0.0)
+
+    def update_caption_clock(self, now=None):
+        """Called under the player lock, including just before pause/resume changes status."""
+        now=time.monotonic() if now is None else now
+        if self.caption_token==self.token and self.status=="playing":
+            self.caption_remaining=max(0.0,self.caption_remaining-(now-self.caption_updated))
+        self.caption_updated=now
+
+    def caption_clock(self):
+        while True:
+            time.sleep(.05)
+            with self.lock:
+                if self.trace_f.closed:
+                    return
+                self.update_caption_clock()
+                if self.caption_token!=self.token or self.status!="playing" or self.caption_remaining>0:
+                    continue
+                token,self.caption_token=self.caption_token,None
+            self.page_event({"event":"caption-ended","kind":"phrase","token":token,"source":"caption-timer"})
 
     def advance(self, tok: int, wait_gap: bool = False):
         """Move on after a phrase. IDEA navigation for the next phrase overlaps the gap.
@@ -1019,10 +1085,22 @@ class Player:
         self.emit({"type": "sound-page", "source": why})
 
     def page_event(self, d: dict):
+        if self.trace_f.closed:
+            return
         self.trace("page", **{k: v for k, v in d.items() if k != "kind"}, audioKind=d.get("kind"))
         ev = d.get("event")
         if ev == "page-closing":   # the page that has the sound is closing: free it now, not at the next keep-alive
             with self.lock:
+                for q in list(self.subs):
+                    if d.get("pageId") and self.sub_pages.get(id(q)) == d["pageId"]:
+                        self.subs.remove(q)
+                        self.sub_pages.pop(id(q), None)
+                        q.close_reason = "page closed"
+                        q.closed.set()
+                        try:
+                            q.put_nowait({"type": "disconnect"})
+                        except queue.Full:
+                            pass
                 freed = d.get("pageId") is not None and d.get("pageId") == self.sound_page
                 if freed:
                     self.sound_page = None
@@ -1043,7 +1121,7 @@ class Player:
                 pos = d.get("currentTime")
             else:
                 pos = None
-            if ev != "audio-ended":
+            if ev not in ("audio-ended","caption-ended"):
                 if pos is not None:
                     self.save_bookmark(float(pos))
                 return
@@ -1065,6 +1143,7 @@ class Player:
     def command(self, cmd: str, args: dict, source: str) -> dict:
         self.trace("command", cmd=cmd, args={k: v for k, v in args.items() if k != "audio"}, source=source)
         with self.lock:
+            self.update_caption_clock()
             st, idx, ci = self.status, self.idx, self.flat[self.idx]["chapterIndex"]
         if cmd == "state":
             return {"ok": True, "state": self.snapshot(), "questions": self.questions[-20:],
@@ -1316,7 +1395,7 @@ class Player:
         with open(self.run_dir / "questions.jsonl", "a", encoding="utf-8") as f:
             f.write(json.dumps(q, ensure_ascii=False) + "\n")
         self.add_inbox({"type": "question", "question": q, "bookmark": bm, "context": self.context()})
-        if self.answerer != "off":
+        if self.answerer != "off" and (self.claude_run_consent or consent.decision("claude") is True):
             q["helper"] = {"state": "working", "startedAt": now_iso(), "model": self.answer_model}
             threading.Thread(target=self.run_helper, args=(q,), daemon=True).start()
         self.emit({"type": "question", "question": q, "source": source})
@@ -1370,6 +1449,8 @@ class Player:
         return "\n\n".join(out)
 
     def run_helper(self, q: dict):
+        if not (self.claude_run_consent or consent.decision("claude") is True):
+            return
         t0 = time.time()
         work = self.run_dir / "answer-helper"
         work.mkdir(exist_ok=True)
@@ -1433,7 +1514,7 @@ class Player:
             except (OSError, ValueError) as e:
                 return {"ok": False, "error": f"bad code pointer: {e}"}
         try:
-            mp3, meta = tts(text, self.voice)
+            mp3, meta = tts(text, self.voice) if consent.decision("azure") is True else (None, {})
         except Exception as e:  # noqa: BLE001
             return {"ok": False, "error": str(e)[:300]}
         nav = self.nav_to(code) if code and self.ide else None
@@ -1441,12 +1522,12 @@ class Player:
             q["answer"] = {"text": text, "by": args.get("by") or source, "answeredAt": now_iso(), "code": code}
             if self.status != "answering":
                 self.resume_status = self.status if self.status != "playing" else "paused"
-            self.status, self.answer_token = "answering", uuid.uuid4().hex[:12]
+            self.status, self.answer_token = ("answering" if mp3 else "paused"), uuid.uuid4().hex[:12]
             tok = self.answer_token
         with open(self.run_dir / "questions.jsonl", "a", encoding="utf-8") as f:
             f.write(json.dumps({"answerTo": qid, **q["answer"]}, ensure_ascii=False) + "\n")
         self.emit({"type": "answer", "answerId": tok, "token": tok, "questionId": qid, "question": q,
-                   "audio": f"/audio/{mp3.stem}.mp3", "audioDurationSec": meta.get("durationSec"),
+                   "audio": f"/audio/{mp3.stem}.mp3" if mp3 else None, "audioDurationSec": meta.get("durationSec"),
                    "nav": nav, "source": source})
         return {"ok": True, "answerId": tok}
 
@@ -1499,6 +1580,8 @@ def make_handler(player: Player):
                                 "pageVersion": page_version()})
             elif path == "/api/events":
                 self.sse()
+            elif path == "/api/stream-status":
+                self.send_json({"subscribers": len(player.subs), "limit": MAX_SUBSCRIBERS})
             elif path.startswith("/diagram/") and path.endswith(".svg"):
                 # only diagrams declared by the loaded walk script are served
                 did = path[len("/diagram/"):-4]
@@ -1525,6 +1608,9 @@ def make_handler(player: Player):
                     player.trace("inbox-delivered", seq=rec["seq"], to=self.headers.get("X-Source") or "wait")
                     self.send_json({"ok": True, "record": rec})
             elif path.startswith("/audio/") and path.endswith(".mp3"):
+                if consent.decision("azure") is not True:
+                    self.send_json({"ok": False, "error": "Narration is off until Azure consent is yes; captions still work."}, 403)
+                    return
                 name = path[len("/audio/"):-4]
                 f = CACHE / f"{name}.mp3"
                 if not (len(name) == 24 and all(c in "0123456789abcdef" for c in name) and f.exists()):
@@ -1556,13 +1642,20 @@ def make_handler(player: Player):
                 self.send_error(404)
 
         def sse(self):
-            q: queue.Queue = queue.Queue()
+            q: queue.Queue = queue.Queue(maxsize=MAX_EVENT_QUEUE)
+            q.closed = threading.Event()
+            with player.lock:
+                if len(player.subs) >= MAX_SUBSCRIBERS:
+                    self.send_json({"ok": False, "error": f"Too many live tabs/streams (limit {MAX_SUBSCRIBERS}); close one and retry."}, 429)
+                    return
+                player.subs.append(q)
+            # A blocked slow socket must not retain its handler forever after queue eviction.
+            self.connection.settimeout(5)
             self.send_response(200)
             self.send_header("Content-Type", "text/event-stream")
             self.send_header("Cache-Control", "no-store")
             pid = re.sub(r"[^A-Za-z0-9]", "", (self.path.split("page=", 1) + [""])[1].split("&")[0])[:40]
             with player.lock:
-                player.subs.append(q)
                 if pid:
                     player.sub_pages[id(q)] = pid
             player.trace("page-connected", pages=len(player.subs), page=pid or None)
@@ -1573,6 +1666,10 @@ def make_handler(player: Player):
                 self.headers_and_body(f"data: {json.dumps(hello, ensure_ascii=False)}\n\n".encode())
                 self.wfile.flush()
                 while True:
+                    if q.closed.is_set():
+                        if getattr(q, "close_reason", "") == "slow subscriber":
+                            self.wfile.write(b'data: {"type":"error","error":"Live stream disconnected: slow subscriber queue limit; reconnecting."}\n\n')
+                        break
                     try:
                         ev = q.get(timeout=15)
                         self.wfile.write(f"data: {json.dumps(ev, ensure_ascii=False)}\n\n".encode())
@@ -1597,9 +1694,37 @@ def make_handler(player: Player):
             if self.headers.get(CTRL_HEADER) != "1":
                 self.send_json({"ok": False, "error": f"missing {CTRL_HEADER} header"}, 403)
                 return
-            n = int(self.headers.get("Content-Length") or 0)
-            body = self.rfile.read(n) if n else b""
             path = self.path.split("?")[0]
+            length = self.headers.get("Content-Length", "0")
+            if len(self.headers.get_all("Content-Length", [])) > 1 or not length.isascii() or not length.isdecimal() or self.headers.get("Transfer-Encoding"):
+                self.send_json({"ok": False, "error": "A single non-negative Content-Length is required; chunked uploads are unsupported."}, 400)
+                return
+            n = int(length) if len(length) < 20 else MAX_AUDIO_BODY + 1
+            limit = MAX_AUDIO_BODY if path in ("/api/ask-audio", "/api/stt") else MAX_JSON_BODY
+            if n > limit:
+                self.close_connection = True
+                self.send_json({"ok": False, "error": f"Request too large: limit is {limit} bytes."}, 413)
+                return
+            self.connection.settimeout(15)
+            try:
+                body = self.rfile.read(n) if n else b""
+            except (OSError, TimeoutError):
+                self.send_json({"ok": False, "error": "Request body timed out"}, 408)
+                return
+            if len(body) != n:
+                self.send_json({"ok": False, "error": "Incomplete request body"}, 400)
+                return
+            if path == "/api/shutdown":
+                supplied = self.headers.get("X-Codewalk-Instance", "")
+                if not ipaddress.ip_address(self.client_address[0]).is_loopback or not supplied.isascii() or not secrets.compare_digest(supplied, player.instance_token):
+                    self.send_json({"ok": False, "error": "Shutdown instance authentication required"}, 403)
+                    return
+                self.send_json({"ok": True})
+                threading.Thread(target=self.server.shutdown, daemon=True).start()
+                return
+            if path in ("/api/ask-audio", "/api/stt") and consent.decision("azure") is not True:
+                self.send_json({"ok": False, "error": "Azure consent is not yes: spoken questions are off; use the text box."}, 403)
+                return
             try:
                 if path == "/api/cmd":
                     d = json.loads(body or b"{}")
@@ -1609,10 +1734,21 @@ def make_handler(player: Player):
                         self.send_json({"ok": True, "state": player.snapshot()})
                     else:
                         self.send_json(player.command(d.get("cmd", ""), d.get("args") or {}, d.get("source") or "api"))
+                elif path == "/api/consent":
+                    d = json.loads(body or b"{}")
+                    if not isinstance(d, dict) or type(d.get("claude")) is not bool:
+                        self.send_json({"ok": False, "error": "claude must be an explicit boolean decision"}, 400)
+                        return
+                    saved = consent.record(claude=d["claude"])
+                    if not player.claude_run_consent:
+                        player.answerer = "claude" if saved.get("claude") and not player.answerer_disabled and shutil.which("claude") else "off"
+                    player.emit({"type": "settings", "source": "consent"})
+                    self.send_json({"ok": True, "consent": saved, "state": player.snapshot()})
                 elif path == "/api/page":
                     player.page_event(json.loads(body or b"{}"))
                     self.send_json({"ok": True})
                 elif path == "/api/ask-audio":
+                    consent.require_azure()
                     source = self.headers.get("X-Source") or "voice"
                     player.trace("ask-audio", bytes=len(body), contentType=self.headers.get("Content-Type"), source=source)
                     r = stt(body)
@@ -1622,6 +1758,7 @@ def make_handler(player: Player):
                     else:
                         self.send_json(player.ask(r["text"], source, r))
                 elif path == "/api/stt":
+                    consent.require_azure()
                     # speech to text only (the Stop & discuss note box): returns the text, asks nothing
                     player.trace("stt-audio", bytes=len(body), contentType=self.headers.get("Content-Type"))
                     r = stt(body)
@@ -1630,6 +1767,8 @@ def make_handler(player: Player):
                                     **({} if r["text"] else {"error": "nothing recognised"})})
                 else:
                     self.send_json({"ok": False, "error": "not found"}, 404)
+            except consent.Required as e:
+                self.send_json({"ok": False, "error": str(e)}, 403)
             except Exception as e:  # noqa: BLE001
                 player.trace("error", path=path, error=str(e)[:300])
                 self.send_json({"ok": False, "error": str(e)[:300]}, 500)
@@ -1640,7 +1779,12 @@ def make_handler(player: Player):
 # ----------------------------------------------------------------------------- CLI
 
 def cmd_validate(a):
-    r = validate(load_script(a.script, a.project_root), Path(a.script).resolve().parent)
+    try:
+        r = validate(load_script(a.script, a.project_root), Path(a.script).resolve().parent)
+    except walk_schema.InvalidWalk as error:
+        r = {"status": "FAIL", "findings": error.findings, "error": str(error)}
+    except (json.JSONDecodeError, UnicodeDecodeError) as error:
+        r = {"status":"FAIL","findings":[{"code":"JSON","detail":str(error)}]}
     print(json.dumps(r, indent=1, ensure_ascii=False))
     return 0 if r["status"] == "PASS" else 1
 
@@ -1701,7 +1845,11 @@ def cmd_serve(a):
     player = Player(s, run_dir, a.voice, a.rate, not a.no_ide, Path(a.script).resolve(), a.ide_follow,
                     root_override=root, auto_continue=a.view or a.auto_continue)
     player.ide_start, player.ide_min_free_gb = a.ide_start, a.ide_min_free_gb
-    player.answerer, player.answer_model = a.answerer, a.answer_model
+    player.claude_run_consent = a.answerer == "claude"
+    player.answerer_disabled = a.answerer == "off"
+    player.answerer = ("claude" if player.claude_run_consent or
+                       (a.answerer is None and consent.decision("claude") is True and shutil.which("claude")) else "off")
+    player.answer_model = a.answer_model
     if a.positions:
         player.positions_dir = Path(a.positions)
     restored = None if a.from_start and not a.start_at else player.restore_position(a.start_at)
@@ -1709,7 +1857,7 @@ def cmd_serve(a):
     srv.daemon_threads = True
     info = {"version": VERSION, "url": f"http://127.0.0.1:{a.port}/", "pid": os.getpid(), "runDir": str(run_dir),
             "script": str(Path(a.script).resolve()), "startedAt": now_iso(), "ide": not a.no_ide,
-            "answerer": a.answerer if a.answerer == "off" else f"{a.answerer} ({a.answer_model})",
+            "answerer": player.answerer if player.answerer == "off" else f"{player.answerer} ({a.answer_model})",
             "restored": restored}
     (run_dir / "server.json").write_text(json.dumps(info, indent=1), encoding="utf-8")
     info.update(player.start_focus())
@@ -1728,6 +1876,9 @@ def cmd_serve(a):
         player.trace("server-stop")
         if player.focus:
             player.focus.stop()
+        srv.server_close()
+        with player.lock:
+            player.trace_f.close()
     return 0
 
 
@@ -1894,9 +2045,8 @@ def main(argv=None):
     s.add_argument("--ide-start", choices=["ask", "auto", "never"], default="ask",
                    help="if IDEA is closed: ask (Start IDEA button, default), auto (start it once when first needed - its window comes to the front), never")
     s.add_argument("--ide-min-free-gb", type=float, default=5.0, help="do not start IDEA below this much free memory")
-    s.add_argument("--answerer", choices=["claude", "off"], default="claude" if shutil.which("claude") else "off",
-                   help="answer page questions automatically with a short headless Claude call (default: on if the "
-                        "claude CLI is installed); tests that script their own answers use off")
+    s.add_argument("--answerer", choices=["claude", "off"], default=None,
+                   help="claude opts in for this run only; default: off unless saved Claude consent is yes and the CLI is installed; off disables it")
     s.add_argument("--answer-model", default="sonnet", help="model for the answer helper")
     s.add_argument("--start-at", help="phrase id to start at (instead of the saved position)")
     s.add_argument("--from-start", action="store_true", help="ignore the saved position")

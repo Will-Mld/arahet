@@ -18,6 +18,8 @@ import codewalk
 
 class WalkRegressions(unittest.TestCase):
     def setUp(self):
+        allowed = patch.object(codewalk.consent, "decision", return_value=True)
+        allowed.start(); self.addCleanup(allowed.stop)
         base = ROOT / "runs" / "player-unit"
         base.mkdir(parents=True, exist_ok=True)
         temp = tempfile.TemporaryDirectory(dir=base)

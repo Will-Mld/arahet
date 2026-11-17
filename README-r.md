@@ -45,6 +45,8 @@ PowerShell. If nothing works, tell the user that codewalk needs Python 3.10 or n
 
 ## Step 2 - What is ready
 
+Upgrading: existing keys or an installed Claude do not grant consent; review `PY bootstrap.py consent` and answer the questions in steps 4 and 5 if not decided.
+
 Run `PY bootstrap.py check --json --quick`. It prints JSON. Report to the user in a short list:
 - the Python version;
 - both example projects from `projects`: `marketstore` and `ignite`, with `ready`, `path`, `version`, `commit`,
@@ -85,6 +87,8 @@ mirror/archive is being used is not a failure; wait for its verification result.
 
 ## Step 4 - The voice
 
+If `PY bootstrap.py consent` reports no Azure decision, ASK: "Narration text and spoken-question audio are sent to Microsoft Azure Speech; allow this?" Record the answer with `PY bootstrap.py consent --azure yes` or `--azure no`. Ask only when undecided. If no, skip voice setup and narration: captions and text questions still work.
+
 Skip to the test below if `key.state` is `ready`.
 
 ASK: "To hear the walk you need an Azure Speech key. Do you already have a key file? If yes, tell me its path. If
@@ -105,6 +109,8 @@ Tell the user in one sentence: "Clips made with a free key are for your own list
 
 ## Step 5 - Optional extras
 
+If `PY bootstrap.py consent` reports no Claude decision, ASK: "Send your question, current phrase, nearby code, paths, diagram and earlier questions to Claude (Anthropic) for an answer?" Record the answer with `PY bootstrap.py consent --claude yes` or `--claude no`. Ask only when undecided; the helper stays off without yes.
+
 ASK each of these, and do nothing for the ones the user declines:
 
 1. "Should IntelliJ IDEA follow the code while you listen?" If yes, run `PY bootstrap.py idea`. If it lists
@@ -115,6 +121,8 @@ ASK each of these, and do nothing for the ones the user declines:
    then run `PY bootstrap.py hook --claude --yes` and/or `--codex --yes`.
 
 ## Step 6 - Choose the walk and its voice
+
+If Azure consent is not yes, choose the walk below but skip narration and go to step 7 for captions.
 
 ASK which walk to play. Offer the five from step 2 with their minutes: `demo`, `marketstore`, `ignite`, `guide`
 and `design`. Suggest `demo` for a first look; `ignite` follows the Apache Ignite thin client from API to cache
@@ -183,8 +191,7 @@ ASK once: "Shall I listen for your questions and Stop & discuss notes while you 
    `"timeout": true` and exits with code 2, which is not a failure (rule 4 does not apply). Between two
    waits, read any message the user typed and serve it (step 8) first. While you wait, the page shows "The session is
    listening for questions and Stop & discuss notes." or, with an answer helper, adds "the session is listening too."
-2. A record of type `question`: if `tools.claude` was true in step 2, the player answers it itself; do nothing. If
-   not, answer briefly with `PY codewalk.py ctl answer --qid <id> --text "..."`.
+2. A record of type `question`: if `ctl state` shows an enabled `answerHelper` (Claude installed and consent yes), the player answers it itself; do nothing. Otherwise answer briefly with `PY codewalk.py ctl answer --qid <id> --text "..."`.
 3. A record of type `discussion`: the walk is paused at the user's place (`bookmark.phraseId`). Tell the user their
    note and the phrase, read the code it points at, and say what you would change. ASK before changing the walk.
 4. If the user agrees, follow [prompts/discuss-and-amend.md](prompts/discuss-and-amend.md), steps 4 and 5: write a
