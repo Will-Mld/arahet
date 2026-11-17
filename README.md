@@ -73,7 +73,7 @@ The agent needs nothing special for this: [README-r.md](README-r.md) tells it wh
 A bundle holds one walk version, its diagrams, and a project reference pinned by commit and source-file checksums;
 local-only projects need a matching `--project-root` when played. It contains no audio and no source code by default.
 `--with-code` adds whole referenced files only for recognised Apache-2.0, MIT, BSD-2-Clause, BSD-3-Clause or ISC
-licences, with the licence, NOTICE if present, and attribution; other licences produce a reference bundle
+licenses, with the license, NOTICE if present, and attribution; other licenses produce a reference bundle
 (`--strict` refuses instead). Existing output files are never overwritten.
 
 ```
@@ -128,13 +128,13 @@ Clips made with a free key are for your own listening; publishing audio needs a 
 On Windows, safe IDEA follow polls the foreground process name and ID only while follow is on.
 Setup keeps the key file and IDEA config under `~/.config/codewalk/` by default, and the player listens on `127.0.0.1`.
 
-## Licence
+## License
 
 Source-available, not open source: [PolyForm Strict License 1.0.0](LICENSE), with an
 [additional permission](ADDITIONAL-PERMISSION.md). You may use it for any noncommercial purpose, and change your own
 copy for your own noncommercial use: change the player and the page, adapt the prompts, amend the walks, write walks
 of your own projects. You may not
-distribute it, publish changed versions, or use it commercially without a separate licence from the author.
+distribute it, publish changed versions, or use it commercially without a separate license from the author.
 
 Pull requests are not accepted. Issues and feedback are welcome.
 
@@ -142,7 +142,7 @@ The example walks describe MarketStore (Apache-2.0, by Alpaca) and Apache Ignite
 Foundation). Their source code is not part of this repository; codewalk is not affiliated with or endorsed by
 either project. See [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 
-arahet™ is a trademark of William Molodchenko, used but not registered. The licence does not grant any right to use
+arahet™ is a trademark of William Molodchenko, used but not registered. The license does not grant any right to use
 the name arahet.
 
 Copyright 2026 William Molodchenko (molodchw@gmail.com)

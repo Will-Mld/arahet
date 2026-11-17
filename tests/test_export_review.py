@@ -104,7 +104,7 @@ class ReviewFixes(unittest.TestCase):
         self.assertIn("core.autocrlf=false", str(caught.exception))
         self.assertFalse(self.output.exists())
 
-    def test_e05_pinned_licence_and_notice_are_used_and_dirty_copies_refused(self):
+    def test_e05_pinned_license_and_notice_are_used_and_dirty_copies_refused(self):
         (self.project / "LICENSE").write_bytes(fixtures.MIT.encode())
         (self.project / "NOTICE").write_bytes(b"Pinned project notice\n")
         committed = {"LICENSE": fixtures.MIT.encode(), "NOTICE": b"Pinned project notice\n"}
@@ -122,7 +122,7 @@ class ReviewFixes(unittest.TestCase):
             (self.project / path).write_bytes(b"Uncommitted change\n")
             with patch.object(bundles, "project_reference", return_value=self.git_project()), \
                  patch.object(bundles, "_git_file", side_effect=lambda root, project, file: committed.get(file)), \
-                 self.assertRaisesRegex(bundles.BundleError, "licence/NOTICE differs"):
+                 self.assertRaisesRegex(bundles.BundleError, "license/NOTICE differs"):
                 bundles.export_bundle(self.script, self.directory / (path + ".zip"), with_code=True)
             (self.project / path).write_bytes(committed[path])
 

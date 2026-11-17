@@ -128,7 +128,7 @@ class Structure(Base):
             with self.subTest(kind=kind, field=field): self.invalid(raw, field)
 
 
-class LicenceRules(unittest.TestCase):
+class LicenseRules(unittest.TestCase):
     setUp = test_export.Exports.setUp
     save_script = test_export.Exports.save_script
     export = test_export.Exports.export
@@ -168,11 +168,11 @@ class LicenceRules(unittest.TestCase):
         self.assertFalse(bundles.apache_header(b"SPDX-License-Identifier: Apache-2.0"))
         self.assertFalse(bundles.apache_header(b"This file is NOT Licensed under the Apache License, Version 2.0"))
 
-    def test_two_root_licences_are_ambiguous_even_if_identical(self):
+    def test_two_root_licenses_are_ambiguous_even_if_identical(self):
         (self.project / "LICENSE.txt").write_text(test_export.MIT, encoding="utf-8")
         result = self.export(with_code=True)
         self.assertFalse(result["codeIncluded"])
-        self.assertIn("Multiple root licence", result["note"])
+        self.assertIn("Multiple root license", result["note"])
 
     def test_two_grants_or_unrecognized_prefix_cannot_hide_in_copyright(self):
         for text in (test_export.MIT + test_export.MIT, test_export.MIT + test_export.ISC,

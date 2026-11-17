@@ -132,12 +132,12 @@ class Exports(unittest.TestCase):
                 new.writestr(name, data)
         return target
 
-    def test_all_five_standard_licences_and_alternate_filenames(self):
+    def test_all_five_standard_licenses_and_alternate_filenames(self):
         cases = {"MIT": MIT, "ISC": ISC, "BSD-2-Clause": BSD_HEAD + BSD_TAIL,
                  "BSD-3-Clause": BSD_HEAD + BSD_THIRD + BSD_TAIL,
                  "Apache-2.0": (ROOT / "third_party/APACHE-2.0.txt").read_text(encoding="utf-8")}
         for ident, text in cases.items():
-            with self.subTest(licence=ident):
+            with self.subTest(license=ident):
                 (self.project / "LICENSE").write_text(text, encoding="utf-8")
                 self.assertEqual(bundles.detect_license(self.project)["id"], ident)
                 self.assertTrue(bundles.detect_license(self.project)["allowed"])
@@ -168,7 +168,7 @@ class Exports(unittest.TestCase):
             for name, expected in manifest["members"].items():
                 self.assertEqual(hashlib.sha256(archive.read(name)).hexdigest(), expected["sha256"])
 
-    def test_code_round_trip_preserves_source_licence_notice_and_version(self):
+    def test_code_round_trip_preserves_source_license_notice_and_version(self):
         (self.project / "NOTICE").write_bytes(b"Project notice\n")
         self.export(with_code=True)
         with contextlib.redirect_stdout(io.StringIO()):
@@ -205,7 +205,7 @@ class Exports(unittest.TestCase):
         (self.project / "LICENSE").write_text("All rights reserved.")
         result = self.export(with_code=True)
         self.assertFalse(result["codeIncluded"])
-        self.assertIn("not one canonical allowed licence", result["note"])
+        self.assertIn("not one canonical allowed license", result["note"])
         output = self.directory / "not-created/strict.zip"
         with self.assertRaisesRegex(bundles.BundleError, "--strict"):
             bundles.export_bundle(self.script, output, with_code=True, strict=True)

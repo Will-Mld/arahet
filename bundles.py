@@ -142,7 +142,7 @@ def _standard_body(text, body):
     normalized = _normal(text)
     heads = ("permission is hereby granted", "permission to use, copy", "redistribution and use in source")
     if sum(normalized.count(head) for head in heads) != 1:
-        return False  # never hide a second licence inside a copyright variable
+        return False  # never hide a second license inside a copyright variable
     match = re.search(body + "$", normalized)
     if not match:
         return False
@@ -208,15 +208,15 @@ def detect_license(root, texts=None):
             found.append((name, license_id(data.decode("utf-8-sig", errors="replace"))))
     if not found:
         return {"id": "missing", "file": None, "allowed": False, "codeAllowed": False, "rule": None,
-                "reason": "No root licence file was found."}
+                "reason": "No root license file was found."}
     ident = found[0][1] if len(found) == 1 else "unknown"
     extra = ident == "Apache-2.0-with-additional-text"
     return {"id": "Apache-2.0 with additional terms" if extra else ident, "file": found[0][0], "files": [x[0] for x in found],
             "allowed": ident in ALLOWED, "codeAllowed": ident in ALLOWED, "rule": "root-text" if ident in ALLOWED else None,
             "apacheAdditionalText": extra,
-            "reason": ("The licence file adds terms for subcomponents; per-file Apache headers are required." if extra else
-                       "Multiple root licence files are ambiguous." if len(found) > 1 else
-                       "The root licence text is not one canonical allowed licence." if ident not in ALLOWED else None)}
+            "reason": ("The license file adds terms for subcomponents; per-file Apache headers are required." if extra else
+                       "Multiple root license files are ambiguous." if len(found) > 1 else
+                       "The root license text is not one canonical allowed license." if ident not in ALLOWED else None)}
 
 
 def apache_header(data):
@@ -257,7 +257,7 @@ def check_code_license(license, sources):
     return {**license, "allowed": allowed, "codeAllowed": allowed, "rule": "per-file-headers" if allowed else None,
             "missingHeaders": missing,
             "reason": None if allowed else
-                "The licence file adds terms for subcomponents; this file does not carry the Apache header, "
+                "The license file adds terms for subcomponents; this file does not carry the Apache header, "
                 "so codewalk cannot tell which terms cover it: " + (", ".join(missing) or "no referenced source files")}
 
 
@@ -358,7 +358,7 @@ def project_notices(root, project):
         working = read_file(path) if path.exists() else None
         pinned = _git_file(root, project, name) if pinned_git else working
         if pinned_git and working != pinned:
-            prefix = f"Working-tree licence/NOTICE differs from the pinned Git commit: {name}."
+            prefix = f"Working-tree license/NOTICE differs from the pinned Git commit: {name}."
             raise BundleError(mismatch_message(prefix, working, digest(pinned)) if working is not None and pinned is not None else prefix)
         if pinned is not None:
             texts[name] = pinned
@@ -447,7 +447,7 @@ def export_bundle(script_path, output, project_root=None, with_code=False, stric
         sources[relative] = data
     license = check_code_license(license, sources)
     include = with_code and license["allowed"]
-    excluded = (f"Code not included: licence {license['id']}. " + license.get("reason", "Not an allowed licence.")) if with_code and not include else None
+    excluded = (f"Code not included: license {license['id']}. " + license.get("reason", "Not an allowed license.")) if with_code and not include else None
     if excluded and strict:
         raise BundleError(excluded + " --strict: no bundle written.")
     if include:
@@ -481,7 +481,7 @@ def export_bundle(script_path, output, project_root=None, with_code=False, stric
                     "IDEA follow requires --project-root <matching local project>.\n"
                     "No audio is included; narration uses your own local cache/key.\n\n"
                     f"Project: {project['name']}\nRepository: {project['repository'] or 'local only'}\n"
-                    f"Commit: {project['commit'] or 'local only'}\nLicence: {license['id']}\n" +
+                    f"Commit: {project['commit'] or 'local only'}\nLicense: {license['id']}\n" +
                     (attribution if include else "Source is referenced; no source files are included.") + "\n")
     members["README.txt"] = instructions.encode("utf-8")
     manifest = {"format": FORMAT, "codewalkVersion": codewalk.VERSION,
@@ -602,7 +602,7 @@ def validate_manifest(manifest):
         if "codeAllowed" in manifest:
             _typed(manifest["codeAllowed"], bool, "codeAllowed")
             if manifest["codeAllowed"] != license.get("codeAllowed") or (included and not manifest["codeAllowed"]):
-                raise BundleError("Code permission flag disagrees with licence rule")
+                raise BundleError("Code permission flag disagrees with license rule")
         if "codeReason" in manifest:
             _typed(manifest["codeReason"], str, "codeReason", nullable=True)
         if type(included) is not bool or not isinstance(manifest["project"], dict):
@@ -613,9 +613,9 @@ def validate_manifest(manifest):
         permitted_id=license["id"] in ALLOWED or (license["id"]=="Apache-2.0 with additional terms" and license.get("rule")=="per-file-headers")
         if included and (not permitted_id or "LICENSES/ATTRIBUTION.txt" not in members
                          or "LICENSES/" + safe_path(manifest["license"]["file"]) not in members):
-            raise BundleError("Code bundle lacks an allowed licence/attribution")
+            raise BundleError("Code bundle lacks an allowed license/attribution")
         if not included and any(name.startswith("LICENSES/") for name in members):
-            raise BundleError("Reference bundle unexpectedly contains licence payload")
+            raise BundleError("Reference bundle unexpectedly contains license payload")
         if sum(info["bytes"] for info in members.values()) > MAX_TOTAL:
             raise BundleError("Bundle exceeds size limit")
         if sum(info["bytes"] for info in files) > MAX_TOTAL:
@@ -729,9 +729,9 @@ def unpack_bundle(bundle, cache_dir=None):
         actual_license = check_code_license(detect_license(destination, texts),
             {info["path"]: read_file(destination / "code" / info["path"]) for info in manifest["files"]})
         if not actual_license["allowed"] or actual_license["id"] != manifest["license"]["id"]:
-            raise BundleError("Bundled licence text does not match its allowed id")
+            raise BundleError("Bundled license text does not match its allowed id")
         if manifest["license"].get("rule", "root-text") != actual_license["rule"]:
-            raise BundleError("Bundled licence rule does not match its source headers")
+            raise BundleError("Bundled license rule does not match its source headers")
     return destination, manifest
 
 

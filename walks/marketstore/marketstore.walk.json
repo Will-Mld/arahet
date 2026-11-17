@@ -13,7 +13,7 @@
   "commit": "007586568aa92a1c83189b3c06843dc27a23e5b3",
   "committed": "2022-11-07",
   "obtain": "python3 bootstrap.py demo: a git checkout of exactly this commit (the original github.com/alpacahq/marketstore is gone; public copies of it serve the commit), or the Go module github.com/alpacahq/marketstore/v4 v4.1.23 from the Go module mirror; both checked against the Go checksum database",
-  "licence": "Apache-2.0"
+  "license": "Apache-2.0"
  },
  "operator": {
   "task": "Walk an engineer through MarketStore: what it is for, how to build and configure it, its design ideas, each module, and the main workflows, with code, schemas, debug points and logs.",

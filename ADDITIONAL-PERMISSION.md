@@ -1,6 +1,6 @@
 # Additional permission
 
-Licensor: William Molodchenko (molodchw@gmail.com). Licence: PolyForm Strict License 1.0.0, in [LICENSE](LICENSE),
+Licensor: William Molodchenko (molodchw@gmail.com). License: PolyForm Strict License 1.0.0, in [LICENSE](LICENSE),
 unchanged.
 
 In addition to the rights granted by the PolyForm Strict License 1.0.0, the licensor permits you to make changes to

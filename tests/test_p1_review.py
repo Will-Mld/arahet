@@ -25,7 +25,7 @@ ASF=('Licensed to the Apache Software Foundation (ASF) under one or more\n'
      '(the "License"); you may not use this file except in compliance with the License.')
 
 
-class Licences(unittest.TestCase):
+class Licenses(unittest.TestCase):
     setUp=test_export.Exports.setUp
     save_script=test_export.Exports.save_script
     export=test_export.Exports.export
@@ -66,7 +66,7 @@ class Licences(unittest.TestCase):
 
     def test_f01_holder_terms_length_sentences_and_four_credit_lines_are_refused(self):
         for word in ('only','must','may','not','shall','should','permission','permit','commercial','noncommercial',
-                     'prohibited','restrict','require','educational','licence','license','except','without','terms','condition'):
+                     'prohibited','restrict','require','educational','license','license','except','without','terms','condition'):
             self.assertNotIn(bundles.license_id(self.mit_holder('Example '+word+' Foundation')),bundles.ALLOWED)
         for holder in ('a'*121,'Foo. Another sentence','Foo; extra','Foo\nMore words'):
             self.assertNotIn(bundles.license_id(self.mit_holder(holder)),bundles.ALLOWED)

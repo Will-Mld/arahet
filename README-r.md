@@ -64,7 +64,7 @@ Skip this step if both `projects.marketstore.ready` and `projects.ignite.ready` 
 projects that are missing.
 
 ASK: "Which example project(s) may I download: MarketStore v4.1.23 (about 1 MB), Apache Ignite 2.17.0 (about
-29 MB with Git or 39 MB as an archive), or both? Both use the Apache-2.0 licence and are pinned to the commits
+29 MB with Git or 39 MB as an archive), or both? Both use the Apache-2.0 license and are pinned to the commits
 their walks describe. MarketStore is fetched from the unofficial GitHub copies FluxAstromeshLabs/marketstore,
 hickey/marketstore and nightsuns/marketstore, or the Go module mirror; its tree is accepted only if it matches the
 pinned checksum from Go's checksum database. Ignite is verified against its pinned source-tree checksum. The
@@ -165,7 +165,7 @@ chapter, faster or slower. When you press D in the page, I discuss it with you h
 ADDRESS is the address from step 7. Add `--url ADDRESS` to every `codewalk.py ctl` command. After each command,
 tell the user in one line what happened; for "where am I" use the chapter, topic and phrase from `ctl state`.
 
-On request, export with `PY codewalk.py export --script <current version> --out <file.codewalk.zip>`; add `--with-code` only if requested (fixed licence allow-list), and no audio is included.
+On request, export with `PY codewalk.py export --script <current version> --out <file.codewalk.zip>`; add `--with-code` only if requested (fixed license allow-list), and no audio is included.
 
 | The user says | Run |
 |---|---|
